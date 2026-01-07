@@ -17,17 +17,18 @@ This document explains the containerized architecture of the ROS Blockly project
 *   **Role**: Represents the "brain" of the robot. In a real deployment, this container would run on the physical robot. In this simulation, it runs the bridge to Gazebo.
 *   **Image**: `ros:jazzy` with `ros-gz-bridge`.
 *   **Command**: Runs `ros_gz_bridge parameter_bridge` to bridge topics between ROS 2 and Gazebo Transport.
+    *   **Runtime Export**: `export GZ_IP=$(hostname -i)` is executed before the bridge to dynamically set the IP for Gazebo Transport discovery.
     *   `/cmd_vel` (ROS) <-> `/cmd_vel` (Gazebo)
     *   `/model/vehicle_blue/odometry` (Gazebo) -> `/odom` (ROS)
     *   `/world/empty/set_pose` (ROS Service) <-> Gazebo Service
 *   **Environment**:
-    *   `GZ_IP=$(hostname -i)`: Dynamically sets the IP for Gazebo Transport discovery.
     *   `GZ_PARTITION=sim`: Ensures it connects to the same Gazebo partition as the simulator.
 
 ### 3. `simulator`
 *   **Role**: Runs the Gazebo Harmonic simulation environment.
 *   **Image**: `osrf/ros:jazzy-desktop-full` with VNC/noVNC installed.
 *   **Command**: Executes `start.sh` which:
+    *   **Runtime Export**: Sets `export GZ_IP=$(hostname -i)` internally.
     *   Starts Xvfb (virtual display).
     *   Starts `x11vnc` and `websockify` (for browser-based viewing).
     *   Launches `gz sim` with a headless server.
@@ -36,7 +37,6 @@ This document explains the containerized architecture of the ROS Blockly project
 *   **Environment**:
     *   `DISPLAY=:0`: For the virtual X server.
     *   `GZ_PARTITION=sim`: Matches the robot container.
-    *   `GZ_IP`: Dynamically set in `start.sh`.
 
 ### 4. `client`
 *   **Role**: Serves the React web application.
