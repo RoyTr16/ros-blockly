@@ -64,5 +64,5 @@ All services are connected to a custom bridge network `ros_net`. This allows the
 | :--- | :--- | :--- |
 | `ROS_DOMAIN_ID` | `robot`, `simulator` | Sets the ROS 2 logical network ID. Must match for nodes to discover each other. |
 | `GZ_PARTITION` | `robot`, `simulator` | Sets the Gazebo Transport partition name. Must match for Gazebo nodes to discover each other. |
-| `GZ_IP` | `robot`, `simulator` | Explicitly sets the IP address for Gazebo Transport to bind to. Crucial for Docker networking. |
+| `GZ_IP` | `robot`, `simulator` | **Dynamically set at runtime** (via `CMD` or `start.sh`). Explicitly sets the IP address for Gazebo Transport to bind to. Crucial for Docker networking. |
 | `DISPLAY` | `simulator` | Tells GUI applications (Gazebo) which X server to use. |
