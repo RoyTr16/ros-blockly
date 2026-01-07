@@ -1,0 +1,43 @@
+.log-viewer-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0; /* Important for flex nesting */
+}
+
+.log-viewer-container h3 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  font-size: 1.1rem;
+  color: #333;
+}
+
+.logs-list {
+  flex: 1;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 10px;
+  overflow-y: auto;
+  background-color: #f0f0f0;
+  color: #333;
+  font-family: 'Consolas', monospace;
+  font-size: 0.85rem;
+  max-height: 300px; /* Limit height if needed, or let flex handle it */
+}
+
+.log-entry {
+  margin-bottom: 4px;
+  border-bottom: 1px solid #e0e0e0;
+  padding-bottom: 2px;
+}
+
+.log-entry:last-child {
+  border-bottom: none;
+}
+
+.log-empty {
+  color: #888;
+  font-style: italic;
+  text-align: center;
+  margin-top: 20px;
+}

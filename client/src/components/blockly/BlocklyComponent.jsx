@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import * as Blockly from 'blockly/core';
 import { javascriptGenerator } from 'blockly/javascript';
 import 'blockly/blocks';
-import '../blocks/ros_blocks'; // Import custom blocks
+import '../../blocks/ros_blocks'; // Import custom blocks
 
 import * as En from 'blockly/msg/en';
 Blockly.setLocale(En);
