@@ -12,6 +12,10 @@ services:
       context: ./docker/robot
     environment:
       - ROS_DOMAIN_ID=0
+      # Gazebo Transport settings for discovery across containers
+      - GZ_PARTITION=sim
+    depends_on:
+      - simulator
     networks:
       - ros_net
 
@@ -33,6 +37,7 @@ services:
       - "8080:8080"
     environment:
       - ROS_DOMAIN_ID=0
+      - GZ_PARTITION=sim
     privileged: true
     shm_size: '2gb'
     networks:

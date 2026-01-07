@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Set Gazebo IP dynamically for discovery
+export GZ_IP=$(hostname -i)
+
 # Start Xvfb
 Xvfb :0 -screen 0 1024x768x16 &
 sleep 5
@@ -29,10 +32,8 @@ sleep 5
 ros2 run ros_gz_sim create -file /app/robot.sdf -z 0.5
 
 # Launch Bridge
-# Bridge /cmd_vel (ROS) to /cmd_vel (Gazebo)
-# Note: Gazebo topic might need adjustment based on the model
-# For now, we just start the bridge for generic topics
-ros2 run ros_gz_bridge parameter_bridge /cmd_vel@geometry_msgs/msg/Twist@gz.msgs.Twist /model/vehicle_blue/pose@geometry_msgs/msg/Pose@gz.msgs.Pose &
+# MOVED TO ROBOT CONTAINER
+# ros2 run ros_gz_bridge parameter_bridge /cmd_vel@geometry_msgs/msg/Twist@gz.msgs.Twist /model/vehicle_blue/pose@geometry_msgs/msg/Pose@gz.msgs.Pose &
 
 # Keep container alive
 wait
