@@ -20,7 +20,6 @@ WORKDIR /app
 
 # Copy startup script and robot model
 COPY start.sh .
-COPY robot.sdf .
 COPY apps /root/.fluxbox/apps
 COPY init /root/.fluxbox/init
 RUN chmod +x start.sh

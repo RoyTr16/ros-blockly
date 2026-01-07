@@ -30,7 +30,8 @@ ros2 launch ros_gz_sim gz_sim.launch.py gz_args:="-r empty.sdf" &
 sleep 5
 
 # Spawn Robot
-ros2 run ros_gz_sim create -file /app/robot.sdf -z 0.5
+# Spawn Robot
+ros2 run ros_gz_sim create -file /app/robots/$ROBOT_MODEL/robot.sdf -z 0.5
 
 # Launch Bridge
 # MOVED TO ROBOT CONTAINER

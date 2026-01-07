@@ -14,6 +14,9 @@ services:
       - ROS_DOMAIN_ID=0
       # Gazebo Transport settings for discovery across containers
       - GZ_PARTITION=sim
+      - ROBOT_MODEL=${ROBOT_MODEL:-vehicle_blue}
+    volumes:
+      - ./docker/robots:/app/robots
     depends_on:
       - simulator
     networks:
@@ -38,6 +41,9 @@ services:
     environment:
       - ROS_DOMAIN_ID=0
       - GZ_PARTITION=sim
+      - ROBOT_MODEL=${ROBOT_MODEL:-vehicle_blue}
+    volumes:
+      - ./docker/robots:/app/robots
     privileged: true
     shm_size: '2gb'
     networks:
