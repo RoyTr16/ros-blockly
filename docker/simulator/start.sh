@@ -4,7 +4,8 @@
 export GZ_IP=$(hostname -i)
 
 # Start Xvfb
-Xvfb :0 -screen 0 1024x768x16 &
+# Start Xvfb
+Xvfb :0 -screen 0 1280x720x24 &
 sleep 5
 
 # Start Window Manager
