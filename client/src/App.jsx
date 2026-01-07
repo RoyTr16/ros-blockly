@@ -110,20 +110,31 @@ function App() {
     });
     cmdVel.publish(stopTwist);
 
-    // Reset Pose
-    const poseTopic = new ROSLIB.Topic({
+    // Reset Pose using Service
+    const setPoseClient = new ROSLIB.Service({
       ros: ros,
-      name: '/model/vehicle_blue/pose',
-      messageType: 'geometry_msgs/msg/Pose'
+      name: '/world/empty/set_pose',
+      serviceType: 'ros_gz_interfaces/srv/SetEntityPose'
     });
 
-    const resetPose = new ROSLIB.Message({
-      position: { x: 0, y: 0, z: 0.325 },
-      orientation: { x: 0, y: 0, z: 0, w: 1 }
+    const request = new ROSLIB.ServiceRequest({
+      entity: {
+        name: 'vehicle_blue',
+        type: 2 // MODEL
+      },
+      pose: {
+        position: { x: 0, y: 0, z: 0.325 },
+        orientation: { x: 0, y: 0, z: 0, w: 1 }
+      }
     });
 
-    poseTopic.publish(resetPose);
-    addLog("Reset Robot Position");
+    setPoseClient.callService(request, (result) => {
+      if (result.success) {
+        addLog("Reset Robot Position (Success)");
+      } else {
+        addLog("Reset Robot Position (Failed)");
+      }
+    });
   };
 
   return (
