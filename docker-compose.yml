@@ -1,0 +1,43 @@
+services:
+  rosbridge:
+    build:
+      context: ./docker/rosbridge
+    ports:
+      - "9090:9090"
+    networks:
+      - ros_net
+
+  robot:
+    build:
+      context: ./docker/robot
+    environment:
+      - ROS_DOMAIN_ID=0
+    networks:
+      - ros_net
+
+  client:
+    build:
+      context: ./client
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+    networks:
+      - ros_net
+
+  simulator:
+    build:
+      context: ./docker/simulator
+    ports:
+      - "8080:8080"
+    environment:
+      - ROS_DOMAIN_ID=0
+    privileged: true
+    shm_size: '2gb'
+    networks:
+      - ros_net
+
+networks:
+  ros_net:
+    driver: bridge

@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "blockly": "^12.3.1",
+    "roslib": "^2.0.1"
+  }
+}
