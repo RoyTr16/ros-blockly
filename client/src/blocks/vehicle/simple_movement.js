@@ -1,5 +1,36 @@
+import * as Blockly from 'blockly/core';
 import { javascriptGenerator } from 'blockly/javascript';
 
+// Block Definitions
+Blockly.Blocks['move_robot'] = {
+  init: function() {
+    this.appendDummyInput()
+        .appendField("Move Robot")
+        .appendField("Linear X")
+        .appendField(new Blockly.FieldNumber(0), "LINEAR_X")
+        .appendField("Angular Z")
+        .appendField(new Blockly.FieldNumber(0), "ANGULAR_Z");
+    this.setPreviousStatement(true, null);
+    this.setNextStatement(true, null);
+    this.setColour(230);
+    this.setTooltip("Moves the robot with specified linear and angular velocities.");
+    this.setHelpUrl("");
+  }
+};
+
+Blockly.Blocks['stop_robot'] = {
+  init: function() {
+    this.appendDummyInput()
+        .appendField("Stop Robot");
+    this.setPreviousStatement(true, null);
+    this.setNextStatement(true, null);
+    this.setColour(0);
+    this.setTooltip("Stops the robot.");
+    this.setHelpUrl("");
+  }
+};
+
+// Generator Definitions
 javascriptGenerator.forBlock['move_robot'] = function(block, generator) {
   var linear_x = block.getFieldValue('LINEAR_X');
   var angular_z = block.getFieldValue('ANGULAR_Z');
@@ -73,29 +104,6 @@ javascriptGenerator.forBlock['stop_robot'] = function(block, generator) {
     });
     cmdVel.publish(twist);
     log('Stopped robot');
-  `;
-  return code;
-};
-
-javascriptGenerator.forBlock['ros_publish_twist'] = function(block, generator) {
-  var topic_name = block.getFieldValue('TOPIC');
-  var linear_x = generator.valueToCode(block, 'LINEAR', generator.ORDER_ATOMIC) || '0';
-  var angular_z = generator.valueToCode(block, 'ANGULAR', generator.ORDER_ATOMIC) || '0';
-
-  var code = `
-    var topic = new ROSLIB.Topic({
-      ros : ros,
-      name : '${topic_name}',
-      messageType : 'geometry_msgs/msg/Twist'
-    });
-
-    var twist = new ROSLIB.Message({
-      linear : { x : ${linear_x}, y : 0.0, z : 0.0 },
-      angular : { x : 0.0, y : 0.0, z : ${angular_z} }
-    });
-
-    topic.publish(twist);
-    console.log('Published to ${topic_name}: Lin=' + ${linear_x} + ', Ang=' + ${angular_z});
   `;
   return code;
 };

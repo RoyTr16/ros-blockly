@@ -4,7 +4,6 @@ import Header from './components/ui/Header';
 import ControlPanel from './components/ui/ControlPanel';
 import { RosProvider } from './context/RosContext';
 import useRobotControl from './hooks/useRobotControl';
-import './generators/ros_generator';
 import './App.css';
 
 const AppContent = () => {

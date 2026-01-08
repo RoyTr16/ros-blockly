@@ -2,8 +2,8 @@ import React, { useEffect, useRef } from 'react';
 import * as Blockly from 'blockly/core';
 import { javascriptGenerator } from 'blockly/javascript';
 import 'blockly/blocks';
-import '../../blocks/ros_blocks'; // Import custom blocks
-import '../../blocks/ros_common_blocks'; // Import new common blocks
+import '../../blocks/vehicle/simple_movement'; // Vehicle blocks
+import '../../blocks/common/publish_twist'; // New modular block
 
 import * as En from 'blockly/msg/en';
 Blockly.setLocale(En);
