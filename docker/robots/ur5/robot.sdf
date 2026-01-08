@@ -1,0 +1,9 @@
+<?xml version="1.0" ?>
+<sdf version="1.8">
+  <model name="ur5">
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/AndrejOrsula/models/ur5_rg2</uri>
+      <pose>0 0 0 0 0 0</pose>
+    </include>
+  </model>
+</sdf>
