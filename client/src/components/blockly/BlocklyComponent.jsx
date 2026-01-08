@@ -3,9 +3,12 @@ import * as Blockly from 'blockly/core';
 import { javascriptGenerator } from 'blockly/javascript';
 import 'blockly/blocks';
 import '../../blocks/ros_blocks'; // Import custom blocks
+import '../../blocks/ros_common_blocks'; // Import new common blocks
 
 import * as En from 'blockly/msg/en';
 Blockly.setLocale(En);
+
+import { toolbox } from '../../config/toolbox';
 
 const BlocklyComponent = (props) => {
   const blocklyDiv = useRef(null);
@@ -15,12 +18,7 @@ const BlocklyComponent = (props) => {
     const { initialXml, children, ...rest } = props;
 
     workspace.current = Blockly.inject(blocklyDiv.current, {
-      toolbox: `
-        <xml xmlns="https://developers.google.com/blockly/xml">
-          <block type="move_robot"></block>
-          <block type="stop_robot"></block>
-        </xml>
-      `,
+      toolbox: toolbox,
       ...rest,
     });
 

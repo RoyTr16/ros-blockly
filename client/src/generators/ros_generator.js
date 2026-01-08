@@ -76,3 +76,26 @@ javascriptGenerator.forBlock['stop_robot'] = function(block, generator) {
   `;
   return code;
 };
+
+javascriptGenerator.forBlock['ros_publish_twist'] = function(block, generator) {
+  var topic_name = block.getFieldValue('TOPIC');
+  var linear_x = generator.valueToCode(block, 'LINEAR', generator.ORDER_ATOMIC) || '0';
+  var angular_z = generator.valueToCode(block, 'ANGULAR', generator.ORDER_ATOMIC) || '0';
+
+  var code = `
+    var topic = new ROSLIB.Topic({
+      ros : ros,
+      name : '${topic_name}',
+      messageType : 'geometry_msgs/msg/Twist'
+    });
+
+    var twist = new ROSLIB.Message({
+      linear : { x : ${linear_x}, y : 0.0, z : 0.0 },
+      angular : { x : 0.0, y : 0.0, z : ${angular_z} }
+    });
+
+    topic.publish(twist);
+    console.log('Published to ${topic_name}: Lin=' + ${linear_x} + ', Ang=' + ${angular_z});
+  `;
+  return code;
+};
