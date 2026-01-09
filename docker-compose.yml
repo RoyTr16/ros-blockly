@@ -3,7 +3,7 @@ services:
     build:
       context: ./docker/rosbridge
     ports:
-      - "9090:9090"
+      - "${ROSBRIDGE_PORT}:9090"
     networks:
       - ros_net
 
@@ -11,9 +11,9 @@ services:
     build:
       context: ./docker/robot
     environment:
-      - ROS_DOMAIN_ID=0
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID}
       # Gazebo Transport settings for discovery across containers
-      - GZ_PARTITION=sim
+      - GZ_PARTITION=${GZ_PARTITION}
       - ROBOT_MODEL=${ROBOT_MODEL:-ur5}
     volumes:
       - ./docker/robots:/app/robots
@@ -26,7 +26,7 @@ services:
     build:
       context: ./client
     ports:
-      - "5173:5173"
+      - "${CLIENT_PORT}:5173"
     volumes:
       - ./client:/app
       - /app/node_modules
@@ -37,11 +37,11 @@ services:
     build:
       context: ./docker/simulator
     ports:
-      - "8080:8080"
+      - "${VNC_PORT}:8080"
     environment:
-      - ROS_DOMAIN_ID=0
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID}
       - ROBOT_MODEL=${ROBOT_MODEL:-vehicle_blue}
-      - GZ_PARTITION=sim
+      - GZ_PARTITION=${GZ_PARTITION}
     volumes:
       - ./docker/robots:/app/robots
     privileged: true

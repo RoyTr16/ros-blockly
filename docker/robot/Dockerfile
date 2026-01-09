@@ -4,6 +4,8 @@ FROM ros:jazzy
 RUN apt-get update && apt-get install -y \
     ros-jazzy-demo-nodes-cpp \
     ros-jazzy-ros-gz-bridge \
+    ros-jazzy-control-msgs \
+    ros-jazzy-trajectory-msgs \
     && rm -rf /var/lib/apt/lists/*
 
 # Run the bridge instead of the dummy listener
