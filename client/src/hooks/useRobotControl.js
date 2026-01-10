@@ -82,11 +82,33 @@ const useRobotControl = () => {
 
     setPoseClient.callService(request, (result) => {
       if (result.success) {
-        addLog("Reset Robot Position (Success)");
+        addLog("Reset Vehicle Position (Success)");
       } else {
-        addLog("Reset Robot Position (Failed)");
+        // Only log failure if we expected a vehicle (could be running UR5)
+        // addLog("Reset Vehicle Position (Failed)");
       }
     });
+
+    // Reset UR5 (Move to Home)
+    const ur5Topic = new ROSLIB.Topic({
+      ros: ros,
+      name: '/ur5/trajectory',
+      messageType: 'trajectory_msgs/msg/JointTrajectory'
+    });
+
+    const homePoint = new ROSLIB.Message({
+      joint_names: [
+        'ur5_rg2::shoulder_pan_joint', 'ur5_rg2::shoulder_lift_joint', 'ur5_rg2::elbow_joint',
+        'ur5_rg2::wrist_1_joint', 'ur5_rg2::wrist_2_joint', 'ur5_rg2::wrist_3_joint'
+      ],
+      points: [{
+        positions: [0, 0, 0, 0, 0, 0], // All zeros as requested
+        time_from_start: { sec: 2, nanosec: 0 }
+      }]
+    });
+
+    ur5Topic.publish(homePoint);
+    addLog("Sent UR5 Home Command");
   };
 
   return {
