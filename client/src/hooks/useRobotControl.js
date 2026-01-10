@@ -12,10 +12,24 @@ const useRobotControl = () => {
       return;
     }
     try {
-      // Execute the generated code
-      // The generated code assumes 'ros' and 'ROSLIB' are available in scope
-      const runBlocklyCode = new Function('ros', 'ROSLIB', 'log', generatedCode);
-      runBlocklyCode(ros, ROSLIB, addLog);
+      // Helper function for waiting
+      const wait = (seconds) => new Promise(resolve => setTimeout(resolve, seconds * 1000));
+
+      // Execute the generated code inside an async wrapper
+      // The generated code assumes 'ros', 'ROSLIB', 'log', and 'wait' are available
+      const asyncCode = `
+        (async () => {
+          try {
+            ${generatedCode}
+          } catch (err) {
+            console.error(err);
+            log('Error: ' + err.message);
+          }
+        })();
+      `;
+
+      const runBlocklyCode = new Function('ros', 'ROSLIB', 'log', 'wait', asyncCode);
+      runBlocklyCode(ros, ROSLIB, addLog, wait);
       addLog('Code executed successfully');
     } catch (e) {
       console.error(e);

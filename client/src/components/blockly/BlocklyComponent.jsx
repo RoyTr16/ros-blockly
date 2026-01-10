@@ -4,6 +4,7 @@ import * as Blockly from 'blockly/core';
 import { javascriptGenerator } from 'blockly/javascript';
 import 'blockly/blocks'; // Import standard blocks (math, logic, etc.)
 import '../../blocks/common/publish_twist';
+import '../../blocks/common/wait'; // Import wait block
 import '../../blocks/vehicle/simple_movement';
 import '../../blocks/ur5/joint_control';
 import '../../blocks/ur5/single_joint_control';
