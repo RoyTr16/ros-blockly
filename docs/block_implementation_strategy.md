@@ -37,29 +37,30 @@ We will move this to a configuration file (`client/src/config/toolbox.js`) that 
 ## 3. Implementation Steps
 
 ### Step 1: Refactor Code Generator
-Create a standard template for ROS publishers in `ros_generator.js`.
+Create a standard template for ROS publishers in `helpers/ros_utils.js`.
 
+**Crucial Change (Async Support)**:
+Do **not** wrap generated code in `(function(){})()`. The execution engine uses a global `async` wrapper.
 ```javascript
-// Pseudo-code for a generic generator helper
-function generatePublisherCode(topic, msgType, msgContent) {
-  return `
-    var topic = new ROSLIB.Topic({ ... });
-    var msg = new ROSLIB.Message(${JSON.stringify(msgContent)});
-    topic.publish(msg);
-  `;
-}
+// Example Generator
+return `
+  var topic = ...;
+  topic.publish(msg);
+  // Optional: await wait(1);
+`;
 ```
 
 ### Step 2: Define UR5 Blocks
 We need blocks for:
 1.  **Joint Control**: Moving individual joints (shoulder, elbow, wrist).
-    *   *Topic*: `/joint_trajectory_controller/joint_trajectory` (or similar, depending on the controller).
-    *   *Message*: `trajectory_msgs/msg/JointTrajectory`.
 2.  **Gripper Control**: Open/Close gripper.
-    *   *Topic*: `/gripper_cmd` (or service).
 
 ### Step 3: Dynamic Toolbox
-Update `BlocklyComponent.jsx` to import the toolbox definition from a config file.
+The toolbox is configured in `client/src/config/toolbox.js`.
+Categories are split into separate files in `client/src/config/categories/` (e.g., `ur5.js`, `logic.js`).
+To add a new block:
+1.  Define the block in `blocks/<category>/<block>.js`.
+2.  Add it to the XML string in `config/categories/<category>.js`. (No need to touch `toolbox.js` unless it's a new top-level category).
 
 ## 4. Coding Standards
 *   **Naming**: Block IDs should be prefixed (e.g., `ur5_move_joint`, `common_publish`).
