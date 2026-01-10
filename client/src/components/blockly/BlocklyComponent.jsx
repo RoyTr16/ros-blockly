@@ -6,6 +6,7 @@ import 'blockly/blocks'; // Import standard blocks (math, logic, etc.)
 import '../../blocks/common/publish_twist';
 import '../../blocks/vehicle/simple_movement';
 import '../../blocks/ur5/joint_control';
+import '../../blocks/ur5/single_joint_control';
 
 import * as En from 'blockly/msg/en';
 Blockly.setLocale(En);
