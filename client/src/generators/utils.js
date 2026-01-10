@@ -12,16 +12,14 @@ export function generateROS2Publish(topicName, messageType, messageContent) {
   const contentString = typeof messageContent === 'string' ? messageContent : JSON.stringify(messageContent);
 
   return `
-    (function() {
-      var topic = new ROSLIB.Topic({
-        ros : ros,
-        name : '${topicName}',
-        messageType : '${messageType}'
-      });
+    var topic = new ROSLIB.Topic({
+      ros : ros,
+      name : '${topicName}',
+      messageType : '${messageType}'
+    });
 
-      var msg = new ROSLIB.Message(${contentString});
-      topic.publish(msg);
-      console.log('Published to ${topicName}');
-    })();
+    var msg = new ROSLIB.Message(${contentString});
+    topic.publish(msg);
+    console.log('Published to ${topicName}');
   `;
 }

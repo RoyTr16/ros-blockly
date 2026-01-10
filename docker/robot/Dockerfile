@@ -11,4 +11,8 @@ RUN apt-get update && apt-get install -y \
 # Run the bridge instead of the dummy listener
 # We bridge /cmd_vel (ROS) -> /cmd_vel (Gazebo) and /model/vehicle_blue/odometry (Gazebo) -> /odom (ROS)
 # Also bridge the pose for reset functionality
-CMD ["bash", "-c", "export GZ_IP=$(hostname -i) && ros2 run ros_gz_bridge parameter_bridge --ros-args -p config_file:=/app/robots/$ROBOT_MODEL/bridge.yaml"]
+# Copy startup script
+COPY start_robot.sh /app/start_robot.sh
+RUN chmod +x /app/start_robot.sh
+
+CMD ["/app/start_robot.sh"]

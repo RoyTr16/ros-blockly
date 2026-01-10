@@ -33,20 +33,18 @@ javascriptGenerator.forBlock['ur5_move_single_joint'] = function(block, generato
   const position = javascriptGenerator.valueToCode(block, 'POSITION', javascriptGenerator.ORDER_ATOMIC) || '0';
 
   const code = `
-    (function() {
-      var topic = new ROSLIB.Topic({
-        ros : ros,
-        name : '${topicName}',
-        messageType : 'std_msgs/msg/Float64'
-      });
+    var topic = new ROSLIB.Topic({
+      ros : ros,
+      name : '${topicName}',
+      messageType : 'std_msgs/msg/Float64'
+    });
 
-      var msg = new ROSLIB.Message({
-        data : ${position}
-      });
+    var msg = new ROSLIB.Message({
+      data : ${position}
+    });
 
-      topic.publish(msg);
-      console.log('Published ${topicName}: ' + ${position});
-    })();
+    topic.publish(msg);
+    console.log('Published ${topicName}: ' + ${position});
   `;
 
   return code;

@@ -50,30 +50,29 @@ javascriptGenerator.forBlock['ur5_move_joints'] = function(block, generator) {
   const wrist_3 = javascriptGenerator.valueToCode(block, 'ur5_rg2::wrist_3_joint', javascriptGenerator.ORDER_ATOMIC) || '0';
 
   const code = `
-    (function() {
-      // Create Trajectory Message
-      var topic = new ROSLIB.Topic({
-        ros : ros,
-        name : '/ur5/trajectory',
-        messageType : 'trajectory_msgs/msg/JointTrajectory'
-      });
+    // Create Trajectory Message
+    var topic = new ROSLIB.Topic({
+      ros : ros,
+      name : '/ur5/trajectory',
+      messageType : 'trajectory_msgs/msg/JointTrajectory'
+    });
 
-      var msg = new ROSLIB.Message({
-        joint_names: [
-          'ur5_rg2::shoulder_pan_joint', 'ur5_rg2::shoulder_lift_joint', 'ur5_rg2::elbow_joint',
-          'ur5_rg2::wrist_1_joint', 'ur5_rg2::wrist_2_joint', 'ur5_rg2::wrist_3_joint'
-        ],
-        points: [
-          {
-            positions: [${shoulder_pan}, ${shoulder_lift}, ${elbow}, ${wrist_1}, ${wrist_2}, ${wrist_3}],
-            time_from_start: { sec: ${Math.max(1, Math.floor(duration))}, nanosec: 0 }
-          }
-        ]
-      });
+    var msg = new ROSLIB.Message({
+      joint_names: [
+        'ur5_rg2::shoulder_pan_joint', 'ur5_rg2::shoulder_lift_joint', 'ur5_rg2::elbow_joint',
+        'ur5_rg2::wrist_1_joint', 'ur5_rg2::wrist_2_joint', 'ur5_rg2::wrist_3_joint'
+      ],
+      points: [
+        {
+          positions: [${shoulder_pan}, ${shoulder_lift}, ${elbow}, ${wrist_1}, ${wrist_2}, ${wrist_3}],
+          time_from_start: { sec: ${Math.max(1, Math.floor(duration))}, nanosec: 0 }
+        }
+      ]
+    });
 
-      topic.publish(msg);
-      console.log('Published Trajectory Message to /ur5/trajectory');
-    })();
+    topic.publish(msg);
+    console.log('Published Trajectory Message to /ur5/trajectory');
+    await wait(${duration});
   `;
 
   return code;

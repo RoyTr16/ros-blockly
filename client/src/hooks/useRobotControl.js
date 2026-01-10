@@ -12,10 +12,24 @@ const useRobotControl = () => {
       return;
     }
     try {
-      // Execute the generated code
-      // The generated code assumes 'ros' and 'ROSLIB' are available in scope
-      const runBlocklyCode = new Function('ros', 'ROSLIB', 'log', generatedCode);
-      runBlocklyCode(ros, ROSLIB, addLog);
+      // Helper function for waiting
+      const wait = (seconds) => new Promise(resolve => setTimeout(resolve, seconds * 1000));
+
+      // Execute the generated code inside an async wrapper
+      // The generated code assumes 'ros', 'ROSLIB', 'log', and 'wait' are available
+      const asyncCode = `
+        (async () => {
+          try {
+            ${generatedCode}
+          } catch (err) {
+            console.error(err);
+            log('Error: ' + err.message);
+          }
+        })();
+      `;
+
+      const runBlocklyCode = new Function('ros', 'ROSLIB', 'log', 'wait', asyncCode);
+      runBlocklyCode(ros, ROSLIB, addLog, wait);
       addLog('Code executed successfully');
     } catch (e) {
       console.error(e);
@@ -68,11 +82,33 @@ const useRobotControl = () => {
 
     setPoseClient.callService(request, (result) => {
       if (result.success) {
-        addLog("Reset Robot Position (Success)");
+        addLog("Reset Vehicle Position (Success)");
       } else {
-        addLog("Reset Robot Position (Failed)");
+        // Only log failure if we expected a vehicle (could be running UR5)
+        // addLog("Reset Vehicle Position (Failed)");
       }
     });
+
+    // Reset UR5 (Move to Home)
+    const ur5Topic = new ROSLIB.Topic({
+      ros: ros,
+      name: '/ur5/trajectory',
+      messageType: 'trajectory_msgs/msg/JointTrajectory'
+    });
+
+    const homePoint = new ROSLIB.Message({
+      joint_names: [
+        'ur5_rg2::shoulder_pan_joint', 'ur5_rg2::shoulder_lift_joint', 'ur5_rg2::elbow_joint',
+        'ur5_rg2::wrist_1_joint', 'ur5_rg2::wrist_2_joint', 'ur5_rg2::wrist_3_joint'
+      ],
+      points: [{
+        positions: [0, 0, 0, 0, 0, 0], // All zeros as requested
+        time_from_start: { sec: 2, nanosec: 0 }
+      }]
+    });
+
+    ur5Topic.publish(homePoint);
+    addLog("Sent UR5 Home Command");
   };
 
   return {
