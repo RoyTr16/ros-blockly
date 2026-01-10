@@ -1,11 +1,17 @@
+
 import React, { useEffect, useRef } from 'react';
 import * as Blockly from 'blockly/core';
 import { javascriptGenerator } from 'blockly/javascript';
-import 'blockly/blocks';
-import '../../blocks/ros_blocks'; // Import custom blocks
+import 'blockly/blocks'; // Import standard blocks (math, logic, etc.)
+import '../../blocks/common/publish_twist';
+import '../../blocks/vehicle/simple_movement';
+import '../../blocks/ur5/joint_control';
+import '../../blocks/ur5/single_joint_control';
 
 import * as En from 'blockly/msg/en';
 Blockly.setLocale(En);
+
+import { toolbox } from '../../config/toolbox';
 
 const BlocklyComponent = (props) => {
   const blocklyDiv = useRef(null);
@@ -15,12 +21,7 @@ const BlocklyComponent = (props) => {
     const { initialXml, children, ...rest } = props;
 
     workspace.current = Blockly.inject(blocklyDiv.current, {
-      toolbox: `
-        <xml xmlns="https://developers.google.com/blockly/xml">
-          <block type="move_robot"></block>
-          <block type="stop_robot"></block>
-        </xml>
-      `,
+      toolbox: toolbox,
       ...rest,
     });
 
