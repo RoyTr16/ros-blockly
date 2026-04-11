@@ -16,6 +16,7 @@ services:
       - ros_net
 
   robot:
+    profiles: ["sim"]
     build:
       context: ./docker/robot
     environment:
@@ -44,6 +45,7 @@ services:
       - ros_net
 
   simulator:
+    profiles: ["sim"]
     build:
       context: ./docker/simulator
     ports:
