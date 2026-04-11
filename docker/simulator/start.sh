@@ -4,7 +4,7 @@
 export GZ_IP=$(hostname -i)
 
 # Start Xvfb
-# Start Xvfb
+rm -rf /tmp/.X*-lock /tmp/.X11-unix
 Xvfb :0 -screen 0 1280x720x24 &
 sleep 5
 

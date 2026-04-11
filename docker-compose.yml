@@ -1,13 +1,22 @@
 services:
+  zenoh-bridge:
+    image: eclipse/zenoh-bridge-ros2dds:latest
+    command: -e tcp/host.docker.internal:7447
+    ipc: host
+    networks:
+      - ros_net
+
   rosbridge:
     build:
       context: ./docker/rosbridge
+    ipc: host
     ports:
       - "${ROSBRIDGE_PORT}:9090"
     networks:
       - ros_net
 
   robot:
+    profiles: ["sim"]
     build:
       context: ./docker/robot
     environment:
@@ -19,12 +28,14 @@ services:
       - ./docker/robots:/app/robots
     depends_on:
       - simulator
+    ipc: host
     networks:
       - ros_net
 
   client:
     build:
       context: ./client
+    container_name: ros-client-app
     ports:
       - "${CLIENT_PORT}:5173"
     volumes:
@@ -34,6 +45,7 @@ services:
       - ros_net
 
   simulator:
+    profiles: ["sim"]
     build:
       context: ./docker/simulator
     ports:
@@ -45,6 +57,7 @@ services:
     volumes:
       - ./docker/robots:/app/robots
     privileged: true
+    ipc: host
     shm_size: '2gb'
     networks:
       - ros_net

@@ -21,8 +21,13 @@ export const RosProvider = ({ children }) => {
     }
 
     // Connect to ROS
+    const wsUrl = localStorage.getItem('rosbridge_url') 
+      || import.meta.env.VITE_ROSBRIDGE_URL 
+      || `ws://${window.location.hostname}:9090`;
+    
+    console.log(`Connecting to ROS Bridge at: ${wsUrl}`);
     const rosConnection = new ROSLIB.Ros({
-      url: 'ws://localhost:9090',
+      url: wsUrl,
     });
 
     rosConnection.on('connection', () => {
