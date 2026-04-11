@@ -1,4 +1,11 @@
 services:
+  zenoh-bridge:
+    image: eclipse/zenoh-bridge-ros2dds:latest
+    command: -e tcp/host.docker.internal:7447
+    ipc: host
+    networks:
+      - ros_net
+
   rosbridge:
     build:
       context: ./docker/rosbridge
