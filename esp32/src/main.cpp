@@ -7,6 +7,7 @@
 #include <rclc/executor.h>
 #include <rmw_microros/rmw_microros.h>
 #include <std_msgs/msg/int32.h>
+#include <std_msgs/msg/float32.h>
 
 #ifdef HAS_WS2812
   #include <FastLED.h>
@@ -23,6 +24,12 @@
 #define PING_INTERVAL_MS  2000
 #define PING_TIMEOUT_MS   500
 #define PING_ATTEMPTS     3
+#define ULTRASONIC_PUBLISH_MS 100  // 10Hz publish rate
+
+// --- Ultrasonic sensor state ---
+int ultrasonicTrigPin = -1;  // -1 = not configured
+int ultrasonicEchoPin = -1;
+bool ultrasonicEnabled = false;
 
 // --- LED abstraction ---
 void setLed(uint8_t r, uint8_t g, uint8_t b) {
@@ -30,7 +37,6 @@ void setLed(uint8_t r, uint8_t g, uint8_t b) {
   leds[0] = CRGB(r, g, b);
   FastLED.show();
 #else
-  // Plain LED: on if any color component is non-zero
   digitalWrite(LED_PIN, (r || g || b) ? HIGH : LOW);
 #endif
 }
@@ -40,8 +46,27 @@ void blinkLed(uint8_t r, uint8_t g, uint8_t b, unsigned long interval) {
   if (on) setLed(r, g, b); else setLed(0, 0, 0);
 }
 
-rcl_subscription_t subscriber;
-std_msgs__msg__Int32 msg;
+// --- Ultrasonic measurement ---
+float measureDistanceCm() {
+  if (!ultrasonicEnabled) return -1.0f;
+  digitalWrite(ultrasonicTrigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(ultrasonicTrigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(ultrasonicTrigPin, LOW);
+  long duration = pulseIn(ultrasonicEchoPin, HIGH, 30000); // 30ms timeout (~5m max)
+  if (duration == 0) return -1.0f;  // No echo
+  return duration * 0.0343f / 2.0f;  // Speed of sound / 2
+}
+
+// --- ROS entities ---
+rcl_subscription_t led_subscriber;
+rcl_subscription_t ultrasonic_config_subscriber;
+rcl_publisher_t ultrasonic_publisher;
+rcl_timer_t ultrasonic_timer;
+std_msgs__msg__Int32 led_msg;
+std_msgs__msg__Int32 config_msg;
+std_msgs__msg__Float32 distance_msg;
 rclc_executor_t executor;
 rclc_support_t support;
 rcl_allocator_t allocator;
@@ -57,7 +82,7 @@ enum State { WAITING_AGENT, AGENT_AVAILABLE, AGENT_CONNECTED, AGENT_DISCONNECTED
   return false; }}
 
 // Subscription callback - receives a packed RGB color (0xRRGGBB) or 0 for off
-void subscription_callback(const void * msgin) {
+void led_callback(const void * msgin) {
   const std_msgs__msg__Int32 * msg = (const std_msgs__msg__Int32 *)msgin;
   int32_t color = msg->data;
 
@@ -70,26 +95,81 @@ void subscription_callback(const void * msgin) {
   }
 }
 
+// Subscription callback - receives packed pin config (trig << 8 | echo)
+void ultrasonic_config_callback(const void * msgin) {
+  const std_msgs__msg__Int32 * msg = (const std_msgs__msg__Int32 *)msgin;
+  int32_t packed = msg->data;
+  int newTrig = (packed >> 8) & 0xFF;
+  int newEcho = packed & 0xFF;
+
+  if (newTrig == 0 && newEcho == 0) {
+    // Disable ultrasonic
+    ultrasonicEnabled = false;
+    Serial.println("Ultrasonic disabled");
+    return;
+  }
+
+  ultrasonicTrigPin = newTrig;
+  ultrasonicEchoPin = newEcho;
+  pinMode(ultrasonicTrigPin, OUTPUT);
+  pinMode(ultrasonicEchoPin, INPUT);
+  ultrasonicEnabled = true;
+  Serial.printf("Ultrasonic configured: trig=G%d, echo=G%d\n", ultrasonicTrigPin, ultrasonicEchoPin);
+}
+
+// Timer callback - publish distance reading
+void ultrasonic_timer_callback(rcl_timer_t * timer, int64_t last_call_time) {
+  (void)last_call_time;
+  if (timer == NULL || !ultrasonicEnabled) return;
+  distance_msg.data = measureDistanceCm();
+  Serial.printf("US: %.1f cm\n", distance_msg.data);
+  rcl_publish(&ultrasonic_publisher, &distance_msg, NULL);
+}
+
 bool createEntities() {
   allocator = rcl_get_default_allocator();
 
   RCCHECK(rclc_support_init(&support, 0, NULL, &allocator));
-  RCCHECK(rclc_node_init_default(&node, "esp32_led_node", "", &support));
+  RCCHECK(rclc_node_init_default(&node, "esp32_node", "", &support));
 
+  // LED subscriber
   RCCHECK(rclc_subscription_init_default(
-    &subscriber,
-    &node,
+    &led_subscriber, &node,
     ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32),
     "/esp32/led"));
 
-  RCCHECK(rclc_executor_init(&executor, &support.context, 1, &allocator));
-  RCCHECK(rclc_executor_add_subscription(&executor, &subscriber, &msg, &subscription_callback, ON_NEW_DATA));
+  // Ultrasonic config subscriber
+  RCCHECK(rclc_subscription_init_default(
+    &ultrasonic_config_subscriber, &node,
+    ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32),
+    "/esp32/ultrasonic_config"));
+
+  // Ultrasonic distance publisher
+  RCCHECK(rclc_publisher_init_default(
+    &ultrasonic_publisher, &node,
+    ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32),
+    "/esp32/ultrasonic"));
+
+  // Timer for ultrasonic publishing at 10Hz
+  RCCHECK(rclc_timer_init_default(
+    &ultrasonic_timer, &support,
+    RCL_MS_TO_NS(ULTRASONIC_PUBLISH_MS),
+    ultrasonic_timer_callback));
+
+  // Executor: 2 subscribers + 1 timer = 3 handles
+  RCCHECK(rclc_executor_init(&executor, &support.context, 3, &allocator));
+  RCCHECK(rclc_executor_add_subscription(&executor, &led_subscriber, &led_msg, &led_callback, ON_NEW_DATA));
+  RCCHECK(rclc_executor_add_subscription(&executor, &ultrasonic_config_subscriber, &config_msg, &ultrasonic_config_callback, ON_NEW_DATA));
+  RCCHECK(rclc_executor_add_timer(&executor, &ultrasonic_timer));
 
   return true;
 }
 
 void destroyEntities() {
-  rcl_subscription_fini(&subscriber, &node);
+  rcl_subscription_fini(&led_subscriber, &node);
+  rcl_subscription_fini(&ultrasonic_config_subscriber, &node);
+  rcl_publisher_fini(&ultrasonic_publisher, &node);
+  rcl_timer_fini(&ultrasonic_timer);
   rclc_executor_fini(&executor);
   rcl_node_fini(&node);
   rclc_support_fini(&support);

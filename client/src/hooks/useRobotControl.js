@@ -12,6 +12,10 @@ const useRobotControl = () => {
       return;
     }
     try {
+      // Record start time for elapsed-time blocks
+      if (!window.rosBlockly) window.rosBlockly = {};
+      window.rosBlockly.startTime = Date.now();
+
       // Helper function for waiting
       const wait = (seconds) => new Promise(resolve => setTimeout(resolve, seconds * 1000));
 
@@ -49,6 +53,26 @@ const useRobotControl = () => {
       clearInterval(window.rosBlockly.interval);
       window.rosBlockly.interval = null;
     }
+
+    // Clear graph data
+    if (window.rosBlockly) {
+      window.rosBlockly.graphData = null;
+      if (window.rosBlockly.onGraphUpdate) {
+        window.rosBlockly.onGraphUpdate(null);
+      }
+    }
+
+    // Unsubscribe ultrasonic sensor and disable it
+    if (window.rosBlockly && window.rosBlockly.ultrasonicSub) {
+      window.rosBlockly.ultrasonicSub.unsubscribe();
+      window.rosBlockly.ultrasonicSub = null;
+    }
+    const ultrasonicConfig = new ROSLIB.Topic({
+      ros: ros,
+      name: '/esp32/ultrasonic_config',
+      messageType: 'std_msgs/msg/Int32'
+    });
+    ultrasonicConfig.publish(new ROSLIB.Message({ data: 0 }));
 
     // Stop command
     const cmdVel = new ROSLIB.Topic({

@@ -9,6 +9,8 @@ import '../../blocks/vehicle/simple_movement';
 import '../../blocks/ur5/joint_control';
 import '../../blocks/ur5/single_joint_control';
 import '../../blocks/esp32/led_control';
+import '../../blocks/esp32/ultrasonic';
+import '../../blocks/utilities/utilities';
 
 import * as En from 'blockly/msg/en';
 Blockly.setLocale(En);

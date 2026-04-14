@@ -6,6 +6,7 @@ import { commonCategory } from './categories/common';
 import { vehicleCategory } from './categories/vehicle';
 import { ur5Category } from './categories/ur5';
 import { esp32Category } from './categories/esp32';
+import { utilitiesCategory } from './categories/utilities';
 
 // Export the full toolbox XML
 export const toolbox = `
@@ -14,6 +15,7 @@ export const toolbox = `
   ${loopsCategory}
   ${mathCategory}
   ${variablesCategory}
+  ${utilitiesCategory}
   <sep></sep>
   <category name="ROS" colour="60">
     <category name="Common" colour="60">
