@@ -6,3 +6,4 @@ build/
 .vscode/
 *.log
 cyclonedds_auto.xml
+esp32/include/secrets.h

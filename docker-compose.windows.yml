@@ -54,6 +54,17 @@ services:
     networks:
       - ros_net
 
+  microros:
+    build:
+      context: ./docker/microros
+    ports:
+      - "8888:8888/udp"
+    environment:
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID}
+    command: udp4 --port 8888 -v4
+    networks:
+      - ros_net
+
   simulator:
     profiles: ["sim"]
     build:

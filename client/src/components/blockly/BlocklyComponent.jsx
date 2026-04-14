@@ -8,6 +8,7 @@ import '../../blocks/common/wait'; // Import wait block
 import '../../blocks/vehicle/simple_movement';
 import '../../blocks/ur5/joint_control';
 import '../../blocks/ur5/single_joint_control';
+import '../../blocks/esp32/led_control';
 
 import * as En from 'blockly/msg/en';
 Blockly.setLocale(En);

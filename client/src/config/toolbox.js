@@ -5,6 +5,7 @@ import { variablesCategory } from './categories/variables';
 import { commonCategory } from './categories/common';
 import { vehicleCategory } from './categories/vehicle';
 import { ur5Category } from './categories/ur5';
+import { esp32Category } from './categories/esp32';
 
 // Export the full toolbox XML
 export const toolbox = `
@@ -20,6 +21,7 @@ export const toolbox = `
     </category>
     ${vehicleCategory}
     ${ur5Category}
+    ${esp32Category}
   </category>
 </xml>
 `;
