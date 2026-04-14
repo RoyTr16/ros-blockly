@@ -10,12 +10,12 @@
   display: flex;
   flex: 1;
   overflow: hidden;
+  position: relative;
 }
 
 .blockly-container {
-  flex: 2;
+  flex: 1;
   position: relative;
-  border-right: 1px solid var(--border-color);
 }
 
 /* === Blockly Toolbox Overrides === */

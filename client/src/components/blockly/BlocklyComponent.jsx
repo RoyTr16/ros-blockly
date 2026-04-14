@@ -96,7 +96,16 @@ const BlocklyComponent = forwardRef((props, ref) => {
         }
     });
 
+    // Resize Blockly when container size changes (e.g. panel open/close)
+    const resizeObserver = new ResizeObserver(() => {
+      if (workspace.current) {
+        Blockly.svgResize(workspace.current);
+      }
+    });
+    resizeObserver.observe(blocklyDiv.current);
+
     return () => {
+        resizeObserver.disconnect();
         if (workspace.current) {
             workspace.current.dispose();
         }

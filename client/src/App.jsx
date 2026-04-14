@@ -1,4 +1,4 @@
-import React, { useRef, useCallback } from 'react';
+import React, { useRef, useState, useCallback } from 'react';
 import BlocklyComponent from './components/blockly/BlocklyComponent';
 import Header from './components/ui/Header';
 import ControlPanel from './components/ui/ControlPanel';
@@ -10,6 +10,7 @@ import './App.css';
 const AppContent = () => {
   const { generatedCode, setGeneratedCode, runCode, resetRobot } = useRobotControl();
   const blocklyRef = useRef(null);
+  const [panelOpen, setPanelOpen] = useState(false);
 
   const handleCodeChange = (code) => {
     setGeneratedCode(code);
@@ -20,7 +21,14 @@ const AppContent = () => {
 
   return (
     <div className="App">
-      <Header />
+      <Header
+        onRun={runCode}
+        onReset={resetRobot}
+        onSave={handleSave}
+        onLoad={handleLoad}
+        panelOpen={panelOpen}
+        onTogglePanel={() => setPanelOpen(o => !o)}
+      />
 
       <div className="main-content">
         <div className="blockly-container">
@@ -46,6 +54,8 @@ const AppContent = () => {
           onReset={resetRobot}
           onSave={handleSave}
           onLoad={handleLoad}
+          open={panelOpen}
+          onClose={() => setPanelOpen(false)}
         />
       </div>
     </div>

@@ -1,10 +1,60 @@
 .control-panel {
-  flex: 1;
-  padding: 20px;
+  width: 380px;
+  min-width: 380px;
+  padding: 0 20px 20px;
   display: flex;
   flex-direction: column;
   background-color: var(--bg-secondary);
   border-left: 1px solid var(--border-color);
-  max-width: 400px;
-  min-width: 300px;
+  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+
+  /* Slide animation */
+  margin-right: -380px;
+  opacity: 0;
+  transition: margin-right 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.control-panel.open {
+  margin-right: 0;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Panel header with title + close button */
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 0 12px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 16px;
+}
+
+.panel-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+
+.panel-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.panel-close-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.08);
 }
