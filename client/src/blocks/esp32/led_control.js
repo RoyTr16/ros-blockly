@@ -1,69 +1,68 @@
 import * as Blockly from 'blockly/core';
-import { javascriptGenerator } from 'blockly/javascript';
+import { javascriptGenerator, Order } from 'blockly/javascript';
 
-// Predefined color options [label, hex-without-hash]
-const COLOR_OPTIONS = [
-  ['🔴 Red', 'FF0000'],
-  ['🟢 Green', '00FF00'],
-  ['🔵 Blue', '0000FF'],
-  ['🟡 Yellow', 'FFFF00'],
-  ['🟣 Purple', '800080'],
-  ['🟠 Orange', 'FFA500'],
-  ['⚪ White', 'FFFFFF'],
-  ['🩵 Cyan', '00FFFF'],
-];
-
-// --- LED On (with color dropdown) ---
-Blockly.Blocks['esp32_led_on'] = {
+// --- Set Digital Pin ON ---
+Blockly.Blocks['esp32_set_pin_on'] = {
   init: function () {
     this.appendDummyInput()
-      .appendField('ESP32 LED')
-      .appendField(new Blockly.FieldDropdown(COLOR_OPTIONS), 'COLOUR');
+      .appendField('Set Pin');
+    this.appendValueInput('PIN')
+      .setCheck('Pin');
+    this.appendDummyInput()
+      .appendField('ON');
+    this.setInputsInline(true);
     this.setPreviousStatement(true, null);
     this.setNextStatement(true, null);
     this.setColour(15);
-    this.setTooltip('Turn the ESP32 on-board RGB LED to the chosen color.');
+    this.setTooltip('Set a digital pin HIGH (3.3V).');
   },
 };
 
-javascriptGenerator.forBlock['esp32_led_on'] = function (block) {
-  const hex = block.getFieldValue('COLOUR');
-  const colorInt = parseInt(hex, 16);
+javascriptGenerator.forBlock['esp32_set_pin_on'] = function (block) {
+  const pin = javascriptGenerator.valueToCode(block, 'PIN', Order.ATOMIC) || '2';
 
   return `
     {
-      var ledTopic = new ROSLIB.Topic({
+      var pinTopic = new ROSLIB.Topic({
         ros: ros,
-        name: '/esp32/led',
+        name: '/esp32/digital_write',
         messageType: 'std_msgs/msg/Int32'
       });
-      ledTopic.publish(new ROSLIB.Message({ data: ${colorInt} }));
-      log('ESP32 LED -> #${hex}');
+      pinTopic.publish(new ROSLIB.Message({ data: ((${pin} << 8) | 1) }));
+      log('Pin G' + ${pin} + ' -> ON');
     }
   `;
 };
 
-// --- LED Off ---
-Blockly.Blocks['esp32_led_off'] = {
+// --- Set Digital Pin OFF ---
+Blockly.Blocks['esp32_set_pin_off'] = {
   init: function () {
-    this.appendDummyInput().appendField('ESP32 LED Off');
+    this.appendDummyInput()
+      .appendField('Set Pin');
+    this.appendValueInput('PIN')
+      .setCheck('Pin');
+    this.appendDummyInput()
+      .appendField('OFF');
+    this.setInputsInline(true);
     this.setPreviousStatement(true, null);
     this.setNextStatement(true, null);
     this.setColour(15);
-    this.setTooltip('Turn the ESP32 on-board RGB LED off.');
+    this.setTooltip('Set a digital pin LOW (0V).');
   },
 };
 
-javascriptGenerator.forBlock['esp32_led_off'] = function () {
+javascriptGenerator.forBlock['esp32_set_pin_off'] = function (block) {
+  const pin = javascriptGenerator.valueToCode(block, 'PIN', Order.ATOMIC) || '2';
+
   return `
     {
-      var ledTopic = new ROSLIB.Topic({
+      var pinTopic = new ROSLIB.Topic({
         ros: ros,
-        name: '/esp32/led',
+        name: '/esp32/digital_write',
         messageType: 'std_msgs/msg/Int32'
       });
-      ledTopic.publish(new ROSLIB.Message({ data: 0 }));
-      log('ESP32 LED -> OFF');
+      pinTopic.publish(new ROSLIB.Message({ data: ((${pin} << 8) | 0) }));
+      log('Pin G' + ${pin} + ' -> OFF');
     }
   `;
 };

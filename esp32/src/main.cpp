@@ -60,11 +60,11 @@ float measureDistanceCm() {
 }
 
 // --- ROS entities ---
-rcl_subscription_t led_subscriber;
+rcl_subscription_t digital_write_subscriber;
 rcl_subscription_t ultrasonic_config_subscriber;
 rcl_publisher_t ultrasonic_publisher;
 rcl_timer_t ultrasonic_timer;
-std_msgs__msg__Int32 led_msg;
+std_msgs__msg__Int32 digital_write_msg;
 std_msgs__msg__Int32 config_msg;
 std_msgs__msg__Float32 distance_msg;
 rclc_executor_t executor;
@@ -81,18 +81,16 @@ enum State { WAITING_AGENT, AGENT_AVAILABLE, AGENT_CONNECTED, AGENT_DISCONNECTED
   Serial.printf("RCCHECK failed at line %d: %d\n", __LINE__, (int)temp_rc); \
   return false; }}
 
-// Subscription callback - receives a packed RGB color (0xRRGGBB) or 0 for off
-void led_callback(const void * msgin) {
+// Subscription callback - receives packed (pin << 8 | value) for digital write
+void digital_write_callback(const void * msgin) {
   const std_msgs__msg__Int32 * msg = (const std_msgs__msg__Int32 *)msgin;
-  int32_t color = msg->data;
+  int32_t packed = msg->data;
+  int pin = (packed >> 8) & 0xFF;
+  int value = packed & 0xFF;
 
-  if (color == 0) {
-    setLed(0, 0, 0);
-    Serial.println("LED OFF");
-  } else {
-    setLed((color >> 16) & 0xFF, (color >> 8) & 0xFF, color & 0xFF);
-    Serial.printf("LED color: #%06X\n", color);
-  }
+  pinMode(pin, OUTPUT);
+  digitalWrite(pin, value ? HIGH : LOW);
+  Serial.printf("Pin G%d -> %s\n", pin, value ? "ON" : "OFF");
 }
 
 // Subscription callback - receives packed pin config (trig << 8 | echo)
@@ -132,11 +130,11 @@ bool createEntities() {
   RCCHECK(rclc_support_init(&support, 0, NULL, &allocator));
   RCCHECK(rclc_node_init_default(&node, "esp32_node", "", &support));
 
-  // LED subscriber
+  // Digital write subscriber
   RCCHECK(rclc_subscription_init_default(
-    &led_subscriber, &node,
+    &digital_write_subscriber, &node,
     ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32),
-    "/esp32/led"));
+    "/esp32/digital_write"));
 
   // Ultrasonic config subscriber
   RCCHECK(rclc_subscription_init_default(
@@ -158,7 +156,7 @@ bool createEntities() {
 
   // Executor: 2 subscribers + 1 timer = 3 handles
   RCCHECK(rclc_executor_init(&executor, &support.context, 3, &allocator));
-  RCCHECK(rclc_executor_add_subscription(&executor, &led_subscriber, &led_msg, &led_callback, ON_NEW_DATA));
+  RCCHECK(rclc_executor_add_subscription(&executor, &digital_write_subscriber, &digital_write_msg, &digital_write_callback, ON_NEW_DATA));
   RCCHECK(rclc_executor_add_subscription(&executor, &ultrasonic_config_subscriber, &config_msg, &ultrasonic_config_callback, ON_NEW_DATA));
   RCCHECK(rclc_executor_add_timer(&executor, &ultrasonic_timer));
 
@@ -166,7 +164,7 @@ bool createEntities() {
 }
 
 void destroyEntities() {
-  rcl_subscription_fini(&led_subscriber, &node);
+  rcl_subscription_fini(&digital_write_subscriber, &node);
   rcl_subscription_fini(&ultrasonic_config_subscriber, &node);
   rcl_publisher_fini(&ultrasonic_publisher, &node);
   rcl_timer_fini(&ultrasonic_timer);
@@ -208,7 +206,7 @@ void loop() {
         state = AGENT_CONNECTED;
         agentConnected = true;
         setLed(0, 255, 0);  // Green = connected
-        Serial.println("micro-ROS connected! Listening on /esp32/led");
+        Serial.println("micro-ROS connected! Listening on /esp32/digital_write");
       } else {
         state = WAITING_AGENT;
         Serial.println("Failed to create entities, retrying...");

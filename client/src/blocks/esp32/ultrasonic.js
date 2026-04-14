@@ -31,7 +31,9 @@ javascriptGenerator.forBlock['esp32_gpio_pin'] = function (block) {
 Blockly.Blocks['esp32_setup_ultrasonic'] = {
   init: function () {
     this.appendDummyInput()
-      .appendField('Setup Ultrasonic Sensor');
+      .appendField('Setup Ultrasonic Sensor')
+      .appendField('→')
+      .appendField(new Blockly.FieldVariable('distance'), 'VAR');
     this.appendValueInput('TRIG_PIN')
       .setCheck('Pin')
       .appendField('Trigger Pin');
@@ -41,17 +43,20 @@ Blockly.Blocks['esp32_setup_ultrasonic'] = {
     this.setPreviousStatement(true, null);
     this.setNextStatement(true, null);
     this.setColour(15);
-    this.setTooltip('Configure the HC-SR04 ultrasonic sensor and start reading distance.');
+    this.setTooltip('Configure HC-SR04 sensor. Distance readings (cm) are stored in the chosen variable.');
   },
 };
 
 javascriptGenerator.forBlock['esp32_setup_ultrasonic'] = function (block) {
   const trigPin = javascriptGenerator.valueToCode(block, 'TRIG_PIN', Order.ATOMIC) || '17';
   const echoPin = javascriptGenerator.valueToCode(block, 'ECHO_PIN', Order.ATOMIC) || '16';
+  const varName = javascriptGenerator.getVariableName(block.getFieldValue('VAR'));
   const packed = `((${trigPin} << 8) | ${echoPin})`;
 
   return `
     {
+      ${varName} = 0;
+
       // Send pin configuration to ESP32
       var configTopic = new ROSLIB.Topic({
         ros: ros,
@@ -61,9 +66,8 @@ javascriptGenerator.forBlock['esp32_setup_ultrasonic'] = function (block) {
       configTopic.publish(new ROSLIB.Message({ data: ${packed} }));
       log('Ultrasonic sensor: trig=G' + ${trigPin} + ', echo=G' + ${echoPin});
 
-      // Subscribe to distance readings
+      // Subscribe to distance readings → update variable
       if (!window.rosBlockly) window.rosBlockly = {};
-      window.rosBlockly.ultrasonicDistance = 0;
       if (window.rosBlockly.ultrasonicSub) {
         window.rosBlockly.ultrasonicSub.unsubscribe();
       }
@@ -74,7 +78,7 @@ javascriptGenerator.forBlock['esp32_setup_ultrasonic'] = function (block) {
       });
       window.rosBlockly.ultrasonicSub.subscribe(function(msg) {
         if (msg.data >= 0) {
-          window.rosBlockly.ultrasonicDistance = msg.data;
+          ${varName} = msg.data;
         }
       });
 
@@ -82,20 +86,4 @@ javascriptGenerator.forBlock['esp32_setup_ultrasonic'] = function (block) {
       await wait(0.5);
     }
   `;
-};
-
-// --- Read Distance (cm) - value/reporter block ---
-Blockly.Blocks['esp32_read_distance'] = {
-  init: function () {
-    this.appendDummyInput()
-      .appendField('Read Distance (cm)');
-    this.setOutput(true, 'Number');
-    this.setColour(15);
-    this.setTooltip('Returns the latest ultrasonic distance reading in cm.');
-  },
-};
-
-javascriptGenerator.forBlock['esp32_read_distance'] = function () {
-  const code = '(window.rosBlockly ? window.rosBlockly.ultrasonicDistance : 0)';
-  return [code, Order.MEMBER];
 };
