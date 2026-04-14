@@ -1,0 +1,145 @@
+{
+  "id": "esp32",
+  "name": "ESP32 Hardware",
+  "version": "1.0.0",
+  "description": "Digital I/O and sensors for ESP32 via micro-ROS",
+
+  "blocks": [
+    {
+      "type": "esp32_gpio_pin",
+      "definition": {
+        "message0": "%1",
+        "args0": [
+          {
+            "type": "field_dropdown",
+            "name": "PIN",
+            "options": [
+              ["G2", "2"], ["G4", "4"], ["G5", "5"],
+              ["G12", "12"], ["G13", "13"], ["G14", "14"], ["G15", "15"],
+              ["G16", "16"], ["G17", "17"], ["G18", "18"], ["G19", "19"],
+              ["G21", "21"], ["G22", "22"], ["G23", "23"],
+              ["G25", "25"], ["G26", "26"], ["G27", "27"],
+              ["G32", "32"], ["G33", "33"]
+            ]
+          }
+        ],
+        "output": "Pin",
+        "colour": 180,
+        "tooltip": "Select a GPIO pin."
+      },
+      "generator": {
+        "type": "reporter",
+        "template": "{{$PIN}}",
+        "order": "ATOMIC"
+      }
+    },
+    {
+      "type": "esp32_set_pin_on",
+      "definition": {
+        "message0": "Set Pin %1 ON",
+        "args0": [
+          { "type": "input_value", "name": "PIN", "check": "Pin" }
+        ],
+        "inputsInline": true,
+        "previousStatement": null,
+        "nextStatement": null,
+        "colour": 15,
+        "tooltip": "Set a digital pin HIGH (3.3V)."
+      },
+      "generator": {
+        "type": "statement",
+        "template": "{\n  var pinTopic = new ROSLIB.Topic({ ros: ros, name: '/esp32/digital_write', messageType: 'std_msgs/msg/Int32' });\n  pinTopic.publish(new ROSLIB.Message({ data: (({{PIN}} << 8) | 1) }));\n  log('Pin G' + {{PIN}} + ' -> ON');\n}\n",
+        "inputs": {
+          "PIN": { "order": "ATOMIC", "default": "2" }
+        }
+      }
+    },
+    {
+      "type": "esp32_set_pin_off",
+      "definition": {
+        "message0": "Set Pin %1 OFF",
+        "args0": [
+          { "type": "input_value", "name": "PIN", "check": "Pin" }
+        ],
+        "inputsInline": true,
+        "previousStatement": null,
+        "nextStatement": null,
+        "colour": 15,
+        "tooltip": "Set a digital pin LOW (0V)."
+      },
+      "generator": {
+        "type": "statement",
+        "template": "{\n  var pinTopic = new ROSLIB.Topic({ ros: ros, name: '/esp32/digital_write', messageType: 'std_msgs/msg/Int32' });\n  pinTopic.publish(new ROSLIB.Message({ data: (({{PIN}} << 8) | 0) }));\n  log('Pin G' + {{PIN}} + ' -> OFF');\n}\n",
+        "inputs": {
+          "PIN": { "order": "ATOMIC", "default": "2" }
+        }
+      }
+    },
+    {
+      "type": "esp32_setup_ultrasonic",
+      "definition": {
+        "message0": "Setup Ultrasonic Sensor → %1",
+        "args0": [
+          { "type": "field_variable", "name": "VAR", "variable": "distance" }
+        ],
+        "message1": "Trigger Pin %1",
+        "args1": [
+          { "type": "input_value", "name": "TRIG_PIN", "check": "Pin" }
+        ],
+        "message2": "Echo Pin %1",
+        "args2": [
+          { "type": "input_value", "name": "ECHO_PIN", "check": "Pin" }
+        ],
+        "previousStatement": null,
+        "nextStatement": null,
+        "colour": 15,
+        "tooltip": "Configure HC-SR04 sensor. Distance readings (cm) are stored in the chosen variable."
+      },
+      "generator": {
+        "type": "statement",
+        "template": "{\n  {{%VAR}} = 0;\n  var configTopic = new ROSLIB.Topic({ ros: ros, name: '/esp32/ultrasonic_config', messageType: 'std_msgs/msg/Int32' });\n  configTopic.publish(new ROSLIB.Message({ data: (({{TRIG_PIN}} << 8) | {{ECHO_PIN}}) }));\n  log('Ultrasonic sensor: trig=G' + {{TRIG_PIN}} + ', echo=G' + {{ECHO_PIN}});\n  if (!window.rosBlockly) window.rosBlockly = {};\n  if (window.rosBlockly.ultrasonicSub) { window.rosBlockly.ultrasonicSub.unsubscribe(); }\n  window.rosBlockly.ultrasonicSub = new ROSLIB.Topic({ ros: ros, name: '/esp32/ultrasonic', messageType: 'std_msgs/msg/Float32' });\n  window.rosBlockly.ultrasonicSub.subscribe(function(msg) { if (msg.data >= 0) { {{%VAR}} = msg.data; } });\n  await wait(0.5);\n}\n",
+        "inputs": {
+          "TRIG_PIN": { "order": "ATOMIC", "default": "17" },
+          "ECHO_PIN": { "order": "ATOMIC", "default": "16" }
+        }
+      }
+    }
+  ],
+
+  "category": {
+    "name": "ESP32",
+    "colour": 15,
+    "subcategories": [
+      {
+        "name": "Digital Output",
+        "colour": 15,
+        "blocks": [
+          {
+            "type": "esp32_set_pin_on",
+            "shadows": { "PIN": { "type": "esp32_gpio_pin", "fields": { "PIN": "2" } } }
+          },
+          {
+            "type": "esp32_set_pin_off",
+            "shadows": { "PIN": { "type": "esp32_gpio_pin", "fields": { "PIN": "2" } } }
+          }
+        ]
+      },
+      {
+        "name": "Sensors",
+        "colour": 15,
+        "blocks": [
+          {
+            "type": "esp32_setup_ultrasonic",
+            "shadows": {
+              "TRIG_PIN": { "type": "esp32_gpio_pin", "fields": { "PIN": "17" } },
+              "ECHO_PIN": { "type": "esp32_gpio_pin", "fields": { "PIN": "16" } }
+            }
+          }
+        ]
+      }
+    ],
+    "blocks": [
+      { "type": "esp32_gpio_pin" }
+    ]
+  }
+}

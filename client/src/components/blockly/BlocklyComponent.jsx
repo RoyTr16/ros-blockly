@@ -3,19 +3,13 @@ import React, { useEffect, useRef, useImperativeHandle, forwardRef } from 'react
 import * as Blockly from 'blockly/core';
 import { javascriptGenerator } from 'blockly/javascript';
 import 'blockly/blocks'; // Import standard blocks (math, logic, etc.)
-import '../../blocks/common/publish_twist';
-import '../../blocks/common/wait'; // Import wait block
-import '../../blocks/vehicle/simple_movement';
-import '../../blocks/ur5/joint_control';
-import '../../blocks/ur5/single_joint_control';
-import '../../blocks/esp32/led_control';
-import '../../blocks/esp32/ultrasonic';
-import '../../blocks/utilities/utilities';
+import '../../blocks/utilities/utilities'; // Core blocks (not a package)
 
 import * as En from 'blockly/msg/en';
 Blockly.setLocale(En);
 
-import { toolbox } from '../../config/toolbox';
+import { toolbox, buildToolbox } from '../../config/toolbox';
+import { registerPackage } from '../../packages/PackageLoader';
 
 const BlocklyComponent = forwardRef((props, ref) => {
   const blocklyDiv = useRef(null);
@@ -23,6 +17,12 @@ const BlocklyComponent = forwardRef((props, ref) => {
 
   useImperativeHandle(ref, () => ({
     getWorkspace: () => workspace.current,
+    importPackage: (pkg) => {
+      registerPackage(pkg);
+      if (workspace.current) {
+        workspace.current.updateToolbox(buildToolbox());
+      }
+    },
     save: () => {
       if (!workspace.current) return;
       const state = Blockly.serialization.workspaces.save(workspace.current);

@@ -1,0 +1,97 @@
+{
+  "id": "ur5",
+  "name": "UR5 Robot Arm",
+  "version": "1.0.0",
+  "description": "Joint control for the UR5 robotic arm via ROS trajectories",
+
+  "blocks": [
+    {
+      "type": "ur5_move_joints",
+      "definition": {
+        "message0": "Move UR5 Joints",
+        "message1": "Shoulder Pan %1",
+        "args1": [{ "type": "input_value", "name": "SHOULDER_PAN", "check": "Number" }],
+        "message2": "Shoulder Lift %1",
+        "args2": [{ "type": "input_value", "name": "SHOULDER_LIFT", "check": "Number" }],
+        "message3": "Elbow %1",
+        "args3": [{ "type": "input_value", "name": "ELBOW", "check": "Number" }],
+        "message4": "Wrist 1 %1",
+        "args4": [{ "type": "input_value", "name": "WRIST_1", "check": "Number" }],
+        "message5": "Wrist 2 %1",
+        "args5": [{ "type": "input_value", "name": "WRIST_2", "check": "Number" }],
+        "message6": "Wrist 3 %1",
+        "args6": [{ "type": "input_value", "name": "WRIST_3", "check": "Number" }],
+        "message7": "Duration (s) %1",
+        "args7": [{ "type": "field_number", "name": "DURATION", "value": 2, "min": 0 }],
+        "inputsInline": false,
+        "previousStatement": null,
+        "nextStatement": null,
+        "colour": 230,
+        "tooltip": "Move UR5 joints to specified positions using Trajectory Message"
+      },
+      "generator": {
+        "type": "statement",
+        "template": "{\n  var topic = new ROSLIB.Topic({ ros: ros, name: '/ur5/trajectory', messageType: 'trajectory_msgs/msg/JointTrajectory' });\n  var msg = new ROSLIB.Message({\n    joint_names: ['ur5_rg2::shoulder_pan_joint','ur5_rg2::shoulder_lift_joint','ur5_rg2::elbow_joint','ur5_rg2::wrist_1_joint','ur5_rg2::wrist_2_joint','ur5_rg2::wrist_3_joint'],\n    points: [{ positions: [{{SHOULDER_PAN}}, {{SHOULDER_LIFT}}, {{ELBOW}}, {{WRIST_1}}, {{WRIST_2}}, {{WRIST_3}}], time_from_start: { sec: Math.max(1, Math.floor({{$DURATION}})), nanosec: 0 } }]\n  });\n  topic.publish(msg);\n  console.log('Published Trajectory Message to /ur5/trajectory');\n  await wait({{$DURATION}});\n}\n",
+        "inputs": {
+          "SHOULDER_PAN": { "order": "ATOMIC", "default": "0" },
+          "SHOULDER_LIFT": { "order": "ATOMIC", "default": "0" },
+          "ELBOW": { "order": "ATOMIC", "default": "0" },
+          "WRIST_1": { "order": "ATOMIC", "default": "0" },
+          "WRIST_2": { "order": "ATOMIC", "default": "0" },
+          "WRIST_3": { "order": "ATOMIC", "default": "0" }
+        }
+      }
+    },
+    {
+      "type": "ur5_move_single_joint",
+      "definition": {
+        "message0": "Move UR5 %1 to position (radians) %2",
+        "args0": [
+          {
+            "type": "field_dropdown",
+            "name": "JOINT_TOPIC",
+            "options": [
+              ["Shoulder Pan", "/ur5/shoulder_pan/cmd"],
+              ["Shoulder Lift", "/ur5/shoulder_lift/cmd"],
+              ["Elbow", "/ur5/elbow/cmd"],
+              ["Wrist 1", "/ur5/wrist_1/cmd"],
+              ["Wrist 2", "/ur5/wrist_2/cmd"],
+              ["Wrist 3", "/ur5/wrist_3/cmd"]
+            ]
+          },
+          { "type": "input_value", "name": "POSITION", "check": "Number" }
+        ],
+        "previousStatement": null,
+        "nextStatement": null,
+        "colour": 230,
+        "tooltip": "Move a single UR5 joint directly using Position Control"
+      },
+      "generator": {
+        "type": "statement",
+        "template": "{\n  var topic = new ROSLIB.Topic({ ros: ros, name: '{{$JOINT_TOPIC}}', messageType: 'std_msgs/msg/Float64' });\n  var msg = new ROSLIB.Message({ data: {{POSITION}} });\n  topic.publish(msg);\n  console.log('Published {{$JOINT_TOPIC}}: ' + {{POSITION}});\n}\n",
+        "inputs": {
+          "POSITION": { "order": "ATOMIC", "default": "0" }
+        }
+      }
+    }
+  ],
+
+  "category": {
+    "name": "UR5 Arm",
+    "colour": 230,
+    "blocks": [
+      {
+        "type": "ur5_move_joints",
+        "shadows": {
+          "SHOULDER_PAN": { "type": "math_number", "fields": { "NUM": "0" } },
+          "SHOULDER_LIFT": { "type": "math_number", "fields": { "NUM": "0" } },
+          "ELBOW": { "type": "math_number", "fields": { "NUM": "0" } },
+          "WRIST_1": { "type": "math_number", "fields": { "NUM": "0" } },
+          "WRIST_2": { "type": "math_number", "fields": { "NUM": "0" } },
+          "WRIST_3": { "type": "math_number", "fields": { "NUM": "0" } }
+        }
+      },
+      { "type": "ur5_move_single_joint" }
+    ]
+  }
+}

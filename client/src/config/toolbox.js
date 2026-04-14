@@ -2,14 +2,21 @@ import { logicCategory } from './categories/logic';
 import { loopsCategory } from './categories/loops';
 import { mathCategory } from './categories/math';
 import { variablesCategory } from './categories/variables';
-import { commonCategory } from './categories/common';
-import { vehicleCategory } from './categories/vehicle';
-import { ur5Category } from './categories/ur5';
-import { esp32Category } from './categories/esp32';
 import { utilitiesCategory } from './categories/utilities';
+import { registerPackage, getAllPackageToolboxXml } from '../packages/PackageLoader';
 
-// Export the full toolbox XML
-export const toolbox = `
+// Import and register built-in packages
+import esp32Package from '../packages/builtin/esp32.json';
+import vehiclePackage from '../packages/builtin/vehicle.json';
+import ur5Package from '../packages/builtin/ur5.json';
+
+registerPackage(esp32Package);
+registerPackage(vehiclePackage);
+registerPackage(ur5Package);
+
+// Build toolbox XML from core categories + loaded packages
+export function buildToolbox() {
+  return `
 <xml xmlns="https://developers.google.com/blockly/xml">
   ${logicCategory}
   ${loopsCategory}
@@ -17,13 +24,8 @@ export const toolbox = `
   ${variablesCategory}
   ${utilitiesCategory}
   <sep></sep>
-  <category name="ROS" colour="60">
-    <category name="Common" colour="60">
-      ${commonCategory.replace('<category name="Common" colour="120">', '').replace('</category>', '')}
-    </category>
-    ${vehicleCategory}
-    ${ur5Category}
-    ${esp32Category}
-  </category>
-</xml>
-`;
+  ${getAllPackageToolboxXml()}
+</xml>`;
+}
+
+export const toolbox = buildToolbox();

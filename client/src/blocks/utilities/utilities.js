@@ -1,6 +1,25 @@
 import * as Blockly from 'blockly/core';
 import { javascriptGenerator, Order } from 'blockly/javascript';
 
+// --- Wait Seconds block (core, used in Loops category) ---
+Blockly.Blocks['wait_seconds'] = {
+  init: function () {
+    this.appendDummyInput()
+      .appendField('Wait')
+      .appendField(new Blockly.FieldNumber(1, 0), 'SECONDS')
+      .appendField('seconds');
+    this.setPreviousStatement(true, null);
+    this.setNextStatement(true, null);
+    this.setColour(120);
+    this.setTooltip('Pauses execution for the specified number of seconds.');
+  },
+};
+
+javascriptGenerator.forBlock['wait_seconds'] = function (block) {
+  const seconds = block.getFieldValue('SECONDS');
+  return `await wait(${seconds});\n`;
+};
+
 // --- Print block: logs text + value to LogViewer ---
 Blockly.Blocks['utilities_print'] = {
   init: function () {

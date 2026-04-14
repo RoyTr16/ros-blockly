@@ -1,0 +1,80 @@
+{
+  "id": "vehicle",
+  "name": "Vehicle Control",
+  "version": "1.0.0",
+  "description": "Differential-drive vehicle control via ROS Twist messages",
+
+  "blocks": [
+    {
+      "type": "ros_publish_twist",
+      "definition": {
+        "message0": "Publish Twist to %1",
+        "args0": [
+          { "type": "field_input", "name": "TOPIC", "text": "/cmd_vel" }
+        ],
+        "message1": "Linear X %1",
+        "args1": [
+          { "type": "input_value", "name": "LINEAR", "check": "Number" }
+        ],
+        "message2": "Angular Z %1",
+        "args2": [
+          { "type": "input_value", "name": "ANGULAR", "check": "Number" }
+        ],
+        "previousStatement": null,
+        "nextStatement": null,
+        "colour": 230,
+        "tooltip": "Publish a geometry_msgs/Twist message to a specified topic."
+      },
+      "generator": {
+        "type": "statement",
+        "template": "{\n  var topic = new ROSLIB.Topic({ ros: ros, name: '{{$TOPIC}}', messageType: 'geometry_msgs/msg/Twist' });\n  var msg = new ROSLIB.Message({ linear: { x: {{LINEAR}}, y: 0.0, z: 0.0 }, angular: { x: 0.0, y: 0.0, z: {{ANGULAR}} } });\n  topic.publish(msg);\n  console.log('Published to {{$TOPIC}}');\n}\n",
+        "inputs": {
+          "LINEAR": { "order": "ATOMIC", "default": "0" },
+          "ANGULAR": { "order": "ATOMIC", "default": "0" }
+        }
+      }
+    },
+    {
+      "type": "move_robot",
+      "definition": {
+        "message0": "Move Robot  Linear X %1  Angular Z %2",
+        "args0": [
+          { "type": "field_number", "name": "LINEAR_X", "value": 0 },
+          { "type": "field_number", "name": "ANGULAR_Z", "value": 0 }
+        ],
+        "previousStatement": null,
+        "nextStatement": null,
+        "colour": 230,
+        "tooltip": "Moves the robot with specified linear and angular velocities."
+      },
+      "generator": {
+        "type": "statement",
+        "template": "{\n  if (window.rosBlockly && window.rosBlockly.interval) { clearInterval(window.rosBlockly.interval); }\n  var cmdVel = new ROSLIB.Topic({ ros: ros, name: '/cmd_vel', messageType: 'geometry_msgs/msg/Twist' });\n  var twist = new ROSLIB.Message({ linear: { x: {{$LINEAR_X}}, y: 0.0, z: 0.0 }, angular: { x: 0.0, y: 0.0, z: {{$ANGULAR_Z}} } });\n  cmdVel.publish(twist);\n  log('Moving: Linear=' + {{$LINEAR_X}} + ', Angular=' + {{$ANGULAR_Z}});\n  if (!window.rosBlockly) window.rosBlockly = {};\n  window.rosBlockly.interval = setInterval(function() { cmdVel.publish(twist); }, 100);\n}\n"
+      }
+    },
+    {
+      "type": "stop_robot",
+      "definition": {
+        "message0": "Stop Robot",
+        "previousStatement": null,
+        "nextStatement": null,
+        "colour": 0,
+        "tooltip": "Stops the robot."
+      },
+      "generator": {
+        "type": "statement",
+        "template": "{\n  if (window.rosBlockly && window.rosBlockly.interval) { clearInterval(window.rosBlockly.interval); window.rosBlockly.interval = null; }\n  var cmdVel = new ROSLIB.Topic({ ros: ros, name: '/cmd_vel', messageType: 'geometry_msgs/msg/Twist' });\n  cmdVel.publish(new ROSLIB.Message({ linear: { x: 0, y: 0, z: 0 }, angular: { x: 0, y: 0, z: 0 } }));\n  log('Stopped robot');\n}\n"
+      }
+    }
+  ],
+
+  "category": {
+    "name": "Vehicle",
+    "colour": 230,
+    "blocks": [
+      { "type": "move_robot" },
+      { "type": "stop_robot" },
+      { "type": "ros_publish_twist" }
+    ]
+  }
+}
