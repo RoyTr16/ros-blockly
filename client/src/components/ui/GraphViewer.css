@@ -3,30 +3,68 @@
   inset: 0;
   pointer-events: none;
   z-index: 10;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .graph-panel {
   position: absolute;
+  top: 0;
+  left: 0;
   pointer-events: auto;
-  width: 320px;
+  width: 340px;
+  min-width: 220px;
+  min-height: 160px;
   background: var(--bg-surface);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
-  padding: 6px 10px 10px;
-  backdrop-filter: blur(8px);
+  padding: 0;
+  backdrop-filter: blur(12px);
+  will-change: transform;
+  resize: both;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.graph-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: default;
+  flex-shrink: 0;
 }
 
 .graph-panel-title {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   font-weight: 600;
   color: var(--text-secondary);
-  margin-bottom: 4px;
-  text-align: center;
+  letter-spacing: 0.02em;
 }
 
 .graph-panel-canvas {
-  height: 180px;
+  flex: 1;
   position: relative;
+  padding: 6px 10px 10px;
+  min-height: 0;
+}
+
+/* Style the resize handle */
+.graph-panel::-webkit-resizable {
+  background: transparent;
+}
+
+.graph-panel::after {
+  content: '';
+  position: absolute;
+  bottom: 3px;
+  right: 3px;
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid var(--text-muted);
+  border-bottom: 2px solid var(--text-muted);
+  opacity: 0.4;
+  pointer-events: none;
 }

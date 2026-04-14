@@ -4,11 +4,11 @@ import LogViewer from './LogViewer';
 import { useRos } from '../../context/RosContext';
 import './ControlPanel.css';
 
-const ControlPanel = ({ generatedCode, open, onClose }) => {
+const ControlPanel = ({ generatedCode, onClose }) => {
   const { logs } = useRos();
 
   return (
-    <div className={`control-panel ${open ? 'open' : ''}`}>
+    <div className="control-panel">
       <div className="panel-header">
         <span className="panel-title">Console</span>
         <button className="panel-close-btn" onClick={onClose} title="Close Panel">

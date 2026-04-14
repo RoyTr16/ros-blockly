@@ -1,6 +1,83 @@
 import * as Blockly from 'blockly/core';
 import { javascriptGenerator, Order } from 'blockly/javascript';
 
+// --- Eye toggle field (click to toggle visibility) ---
+const EYE_OPEN = 'data:image/svg+xml,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#e8eaf0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>' +
+  '<circle cx="12" cy="12" r="3"/></svg>'
+);
+const EYE_CLOSED = 'data:image/svg+xml,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ea3b5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>' +
+  '<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>' +
+  '<line x1="1" y1="1" x2="23" y2="23"/></svg>'
+);
+
+class FieldEyeToggle extends Blockly.FieldImage {
+  constructor(initialValue) {
+    const isOn = initialValue === 'TRUE';
+    super(isOn ? EYE_OPEN : EYE_CLOSED, 16, 16, 'Toggle visibility');
+    this.EDITABLE = true;
+    this.SERIALIZABLE = true;
+    this.CURSOR = 'pointer';
+    this.toggled_ = isOn;
+  }
+
+  static fromJson(options) {
+    return new FieldEyeToggle(options?.value || 'FALSE');
+  }
+
+  showEditor_() {
+    this.toggled_ = !this.toggled_;
+    this.setValue(this.toggled_ ? 'TRUE' : 'FALSE');
+    // FieldImage clicks don't fire workspace change events, so notify manually
+    window.rosBlockly?.onGraphToggle?.();
+  }
+
+  initView() {
+    super.initView();
+    // Fix the image after FieldImage creates the DOM — value_ may be 'TRUE'/'FALSE'
+    const img = this.fieldGroup_?.querySelector('image');
+    if (img) {
+      img.setAttributeNS('http://www.w3.org/1999/xlink', 'href',
+        this.toggled_ ? EYE_OPEN : EYE_CLOSED);
+    }
+  }
+
+  doValueUpdate_(newValue) {
+    this.toggled_ = newValue === 'TRUE';
+    this.value_ = newValue;
+    this.isDirty_ = true;
+    const src = this.toggled_ ? EYE_OPEN : EYE_CLOSED;
+    // Update the underlying FieldImage src so it renders correctly
+    this.src_ = src;
+    if (this.fieldGroup_) {
+      const img = this.fieldGroup_.querySelector('image');
+      if (img) img.setAttributeNS('http://www.w3.org/1999/xlink', 'href', src);
+    }
+  }
+
+  getValue() {
+    return this.toggled_ ? 'TRUE' : 'FALSE';
+  }
+
+  toXml(fieldElement) {
+    fieldElement.textContent = this.getValue();
+    return fieldElement;
+  }
+
+  loadState(state) {
+    this.setValue(state);
+  }
+
+  saveState() {
+    return this.getValue();
+  }
+}
+
+Blockly.fieldRegistry.register('field_eye_toggle', FieldEyeToggle);
+
 // --- Wait Seconds block (core, used in Loops category) ---
 Blockly.Blocks['wait_seconds'] = {
   init: function () {
@@ -155,10 +232,11 @@ javascriptGenerator.forBlock['utilities_plot_point'] = function (block) {
 Blockly.Blocks['utilities_graph_viewer'] = {
   init: function () {
     this.appendDummyInput()
-      .appendField('Show Graph')
-      .appendField(new Blockly.FieldVariable('myGraph'), 'VAR');
+      .appendField('Graph')
+      .appendField(new Blockly.FieldVariable('myGraph'), 'VAR')
+      .appendField(new FieldEyeToggle('FALSE'), 'VISIBLE');
     this.setColour(260);
-    this.setTooltip('Display a live chart for this graph variable. Place multiple to see multiple graphs.');
+    this.setTooltip('Click the eye to show/hide a live chart for this graph variable.');
   },
 };
 

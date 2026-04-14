@@ -47,17 +47,14 @@ const AppContent = () => {
             />
             <GraphOverlay blocklyRef={blocklyRef} />
         </div>
+      </div>
 
+      {panelOpen && (
         <ControlPanel
           generatedCode={generatedCode}
-          onRun={runCode}
-          onReset={resetRobot}
-          onSave={handleSave}
-          onLoad={handleLoad}
-          open={panelOpen}
           onClose={() => setPanelOpen(false)}
         />
-      </div>
+      )}
     </div>
   );
 };
