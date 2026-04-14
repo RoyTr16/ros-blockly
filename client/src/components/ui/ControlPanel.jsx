@@ -6,7 +6,7 @@ import GraphViewer from './GraphViewer';
 import { useRos } from '../../context/RosContext';
 import './ControlPanel.css';
 
-const ControlPanel = ({ generatedCode, onRun, onReset }) => {
+const ControlPanel = ({ generatedCode, onRun, onReset, onSave, onLoad }) => {
   const { logs, connected } = useRos();
 
   return (
@@ -16,6 +16,8 @@ const ControlPanel = ({ generatedCode, onRun, onReset }) => {
         connected={connected}
         onRun={onRun}
         onReset={onReset}
+        onSave={onSave}
+        onLoad={onLoad}
       />
       <GraphViewer />
       <LogViewer logs={logs} />

@@ -1,7 +1,13 @@
 .action-buttons-container {
   display: flex;
-  gap: 10px;
+  flex-direction: column;
+  gap: 8px;
   margin-bottom: 20px;
+}
+
+.action-row {
+  display: flex;
+  gap: 10px;
 }
 
 .btn {
@@ -37,4 +43,22 @@
 
 .btn-reset:hover:not(.disabled) {
   background-color: #d32f2f;
+}
+
+.btn-save {
+  background-color: #2196F3;
+  color: white;
+}
+
+.btn-save:hover {
+  background-color: #1976D2;
+}
+
+.btn-load {
+  background-color: #FF9800;
+  color: white;
+}
+
+.btn-load:hover {
+  background-color: #F57C00;
 }

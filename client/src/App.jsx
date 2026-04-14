@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useCallback } from 'react';
 import BlocklyComponent from './components/blockly/BlocklyComponent';
 import Header from './components/ui/Header';
 import ControlPanel from './components/ui/ControlPanel';
@@ -8,10 +8,14 @@ import './App.css';
 
 const AppContent = () => {
   const { generatedCode, setGeneratedCode, runCode, resetRobot } = useRobotControl();
+  const blocklyRef = useRef(null);
 
   const handleCodeChange = (code) => {
     setGeneratedCode(code);
   };
+
+  const handleSave = useCallback(() => blocklyRef.current?.save(), []);
+  const handleLoad = useCallback(() => blocklyRef.current?.load(), []);
 
   return (
     <div className="App">
@@ -20,6 +24,7 @@ const AppContent = () => {
       <div className="main-content">
         <div className="blockly-container">
             <BlocklyComponent
+                ref={blocklyRef}
                 readOnly={false}
                 trashcan={true}
                 media={'https://blockly-demo.appspot.com/static/media/'}
@@ -37,6 +42,8 @@ const AppContent = () => {
           generatedCode={generatedCode}
           onRun={runCode}
           onReset={resetRobot}
+          onSave={handleSave}
+          onLoad={handleLoad}
         />
       </div>
     </div>
