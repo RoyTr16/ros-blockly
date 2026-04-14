@@ -15,9 +15,10 @@
 // --- API modules ---
 #include "api/digital_write.h"
 #include "api/ultrasonic.h"
+#include "api/rgb_led.h"
 
 // Total executor handles = sum of all API modules
-#define TOTAL_EXECUTOR_HANDLES (DIGITAL_WRITE_EXECUTOR_HANDLES + ULTRASONIC_EXECUTOR_HANDLES)
+#define TOTAL_EXECUTOR_HANDLES (DIGITAL_WRITE_EXECUTOR_HANDLES + ULTRASONIC_EXECUTOR_HANDLES + RGB_LED_EXECUTOR_HANDLES)
 
 // --- ROS core ---
 static rclc_support_t  support;
@@ -37,6 +38,7 @@ bool createEntities() {
   // Initialize each API module
   if (!digitalWriteInit(&node))            { Serial.println("digital_write init failed"); return false; }
   if (!ultrasonicInit(&node, &support))    { Serial.println("ultrasonic init failed");    return false; }
+  if (!rgbLedInit(&node))                  { Serial.println("rgb_led init failed");       return false; }
 
   // Create executor and register all handles
   rc = rclc_executor_init(&executor, &support.context, TOTAL_EXECUTOR_HANDLES, &allocator);
@@ -44,6 +46,7 @@ bool createEntities() {
 
   if (!digitalWriteAddToExecutor(&executor))  { Serial.println("digital_write executor failed"); return false; }
   if (!ultrasonicAddToExecutor(&executor))    { Serial.println("ultrasonic executor failed");    return false; }
+  if (!rgbLedAddToExecutor(&executor))        { Serial.println("rgb_led executor failed");       return false; }
 
   return true;
 }
@@ -51,6 +54,7 @@ bool createEntities() {
 void destroyEntities() {
   digitalWriteFini(&node);
   ultrasonicFini(&node);
+  rgbLedFini(&node);
   rclc_executor_fini(&executor);
   rcl_node_fini(&node);
   rclc_support_fini(&support);
