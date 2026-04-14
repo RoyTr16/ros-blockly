@@ -1,22 +1,30 @@
-# Linux Docker Compose
+# Windows Docker Compose (Docker Desktop + WSL2)
 #
-# On Linux, rosbridge runs with host networking so DDS multicast reaches
-# physical LAN robots directly — no Zenoh tunnel needed.
+# On Windows, Docker Desktop runs containers behind a WSL2 NAT that blocks
+# UDP multicast. This prevents DDS discovery from reaching physical LAN robots.
+# The zenoh-bridge service tunnels DDS traffic over TCP to a native Windows
+# relay (start_windows_relay.bat) which re-broadcasts onto the physical network.
 #
 # Usage:
-#   docker compose up                (LAN robots)
-#   docker compose --profile sim up  (with simulator)
-#
-# For Windows (Docker Desktop / WSL2), use docker-compose.windows.yml instead.
+#   docker compose -f docker-compose.windows.yml up              (LAN robots)
+#   docker compose -f docker-compose.windows.yml --profile sim up (with simulator)
 
 services:
+  zenoh-bridge:
+    image: eclipse/zenoh-bridge-ros2dds:latest
+    command: -e tcp/host.docker.internal:7447
+    ipc: host
+    networks:
+      - ros_net
+
   rosbridge:
     build:
       context: ./docker/rosbridge
-    network_mode: host
     ipc: host
-    environment:
-      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID}
+    ports:
+      - "${ROSBRIDGE_PORT}:9090"
+    networks:
+      - ros_net
 
   robot:
     profiles: ["sim"]
@@ -43,6 +51,8 @@ services:
     volumes:
       - ./client:/app
       - /app/node_modules
+    networks:
+      - ros_net
 
   simulator:
     profiles: ["sim"]
