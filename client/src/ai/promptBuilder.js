@@ -152,6 +152,10 @@ And declare it in variables:
 "variables": [{ "name": "led1", "id": "var_id_1" }]
 \`\`\`
 
+CRITICAL: When a setup block stores its result in a variable (e.g. rgb_led_setup stores in "led1"), ALL subsequent blocks that operate on that device MUST use the SAME variable. For example, if rgb_led_setup uses VAR "led1", then rgb_led_set_color, rgb_led_preset_color, and rgb_led_off must ALL use VAR "led1" — the same variable id. Do NOT create separate variables for each block. Similarly, esp32_setup_ultrasonic stores in a variable that is then read by other blocks.
+
+Use descriptive variable names like "led1", "distance", "sensor1" — never single letters like i, j, k, m.
+
 ## Example
 User: "Turn on pin 5, wait 2 seconds, then turn it off"
 Response:

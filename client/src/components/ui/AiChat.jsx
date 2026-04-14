@@ -5,10 +5,12 @@ import './AiChat.css';
 
 const API_KEY_STORAGE = 'gemini_api_key';
 
+const ENV_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
+
 const AiChat = ({ blocklyRef }) => {
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem(API_KEY_STORAGE) || '');
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem(API_KEY_STORAGE) || ENV_KEY);
   const [keySet, setKeySet] = useState(() => {
-    const saved = localStorage.getItem(API_KEY_STORAGE);
+    const saved = localStorage.getItem(API_KEY_STORAGE) || ENV_KEY;
     if (saved) {
       initGemini(saved);
       return true;
@@ -18,6 +20,7 @@ const AiChat = ({ blocklyRef }) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [pendingJson, setPendingJson] = useState(null);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -63,6 +66,27 @@ const AiChat = ({ blocklyRef }) => {
     return [...invalid];
   };
 
+  const tryLoadJson = (json) => {
+    const invalid = findInvalidBlocks(json);
+    if (invalid.length > 0) throw new Error(`These block types don't exist: ${invalid.join(', ')}`);
+    const ws = blocklyRef?.current?.getWorkspace?.();
+    if (!ws) throw new Error('No workspace available');
+    Blockly.serialization.workspaces.load(json, ws);
+  };
+
+  const handleApply = () => {
+    if (!pendingJson) return;
+    try {
+      tryLoadJson(pendingJson);
+      setPendingJson(null);
+      setMessages(prev => prev.map(m =>
+        m.role === 'pending' ? { ...m, role: 'success', text: 'Program loaded into workspace!' } : m
+      ));
+    } catch (err) {
+      setMessages(prev => [...prev, { role: 'error', text: err.message }]);
+    }
+  };
+
   const handleSend = async () => {
     const text = input.trim();
     if (!text || loading) return;
@@ -70,6 +94,7 @@ const AiChat = ({ blocklyRef }) => {
     setInput('');
     setMessages(prev => [...prev, { role: 'user', text }]);
     setLoading(true);
+    setPendingJson(null);
 
     try {
       // Get current workspace state for context
@@ -88,34 +113,47 @@ const AiChat = ({ blocklyRef }) => {
       if (!extracted) {
         // Pure conversation — no code block in response
         setMessages(prev => [...prev, { role: 'assistant', text: responseText }]);
-      } else {
-        // Response contains code — try to load it
-        const tryLoad = (json) => {
-          const invalid = findInvalidBlocks(json);
-          if (invalid.length > 0) {
-            throw new Error(`These block types don't exist: ${invalid.join(', ')}`);
-          }
-          const ws2 = blocklyRef?.current?.getWorkspace?.();
-          if (!ws2) throw new Error('No workspace available');
-          Blockly.serialization.workspaces.load(json, ws2);
-        };
-
-        try {
-          tryLoad(extracted.json);
-        } catch (loadErr) {
-          // Feed the error back to the LLM and retry once
-          const fixMsg = `Error loading your JSON into Blockly: "${loadErr.message}". Fix the issue and respond with corrected JSON.`;
-          responseText = await sendMessage(fixMsg, null);
-          extracted = extractBlocklyJson(responseText);
-          if (!extracted) throw new Error('LLM did not return corrected JSON');
-          tryLoad(extracted.json);
-        }
-
-        // Show explanation + success
+      } else if (extracted.parseError || !extracted.json) {
+        // LLM sent a code block but JSON was invalid — ask to fix
         if (extracted.explanation) {
           setMessages(prev => [...prev, { role: 'assistant', text: extracted.explanation }]);
         }
-        setMessages(prev => [...prev, { role: 'success', text: 'Program loaded into workspace!' }]);
+        const fixMsg = `Your JSON had a parse error: "${extracted.parseError}". Please fix and resend only the corrected JSON.`;
+        responseText = await sendMessage(fixMsg, null);
+        extracted = extractBlocklyJson(responseText);
+        if (!extracted || !extracted.json) {
+          throw new Error('Failed to get valid JSON from AI');
+        }
+        // Validate block types before showing Apply
+        const invalid = findInvalidBlocks(extracted.json);
+        if (invalid.length > 0) {
+          throw new Error(`AI used invalid block types: ${invalid.join(', ')}`);
+        }
+        if (extracted.explanation) {
+          setMessages(prev => [...prev, { role: 'assistant', text: extracted.explanation }]);
+        }
+        setPendingJson(extracted.json);
+        setMessages(prev => [...prev, { role: 'pending', text: 'Program ready.' }]);
+      } else {
+        // Valid JSON — validate block types
+        let json = extracted.json;
+        const invalid = findInvalidBlocks(json);
+        if (invalid.length > 0) {
+          // Retry once
+          const fixMsg = `Error: these block types don't exist: ${invalid.join(', ')}. Use only valid blocks. Fix and resend.`;
+          responseText = await sendMessage(fixMsg, null);
+          extracted = extractBlocklyJson(responseText);
+          if (!extracted || !extracted.json) throw new Error('LLM did not return corrected JSON');
+          const invalid2 = findInvalidBlocks(extracted.json);
+          if (invalid2.length > 0) throw new Error(`AI used invalid block types: ${invalid2.join(', ')}`);
+          json = extracted.json;
+        }
+
+        if (extracted.explanation) {
+          setMessages(prev => [...prev, { role: 'assistant', text: extracted.explanation }]);
+        }
+        setPendingJson(json);
+        setMessages(prev => [...prev, { role: 'pending', text: 'Program ready.' }]);
       }
     } catch (err) {
       console.error('AI Chat error:', err);
@@ -180,6 +218,11 @@ const AiChat = ({ blocklyRef }) => {
         {messages.map((msg, i) => (
           <div key={i} className={`ai-chat-msg ${msg.role}`}>
             {msg.text}
+            {msg.role === 'pending' && pendingJson && (
+              <button className="ai-chat-apply-btn" onClick={handleApply}>
+                Apply to Workspace
+              </button>
+            )}
           </div>
         ))}
         {loading && (

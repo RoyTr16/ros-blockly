@@ -151,6 +151,32 @@
   color: #34d399;
 }
 
+.ai-chat-msg.pending {
+  align-self: flex-start;
+  background: rgba(99, 102, 241, 0.10);
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ai-chat-apply-btn {
+  background: var(--accent-indigo);
+  border: none;
+  border-radius: var(--radius-sm);
+  color: white;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  align-self: flex-start;
+}
+
+.ai-chat-apply-btn:hover {
+  opacity: 0.85;
+}
+
 /* Loading indicator */
 .ai-chat-loading {
   display: flex;

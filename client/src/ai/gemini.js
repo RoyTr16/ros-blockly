@@ -63,15 +63,19 @@ export async function sendMessage(userMessage, currentWorkspaceJson = null) {
 
 // Extract JSON from a response string, returns { json, explanation } or null
 export function extractBlocklyJson(text) {
-  const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  // Match all ```json ... ``` blocks (greedy within each block)
+  const jsonMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
   if (!jsonMatch) return null;
 
+  const jsonStr = jsonMatch[1].trim();
+  // Get explanation text (everything outside the code block)
+  const explanation = text.replace(/```(?:json)?\s*\n?[\s\S]*?\n?\s*```/, '').trim();
+
   try {
-    const json = JSON.parse(jsonMatch[1].trim());
-    // Get explanation text (everything outside the code block)
-    const explanation = text.replace(/```(?:json)?\s*[\s\S]*?```/, '').trim();
+    const json = JSON.parse(jsonStr);
     return { json, explanation };
   } catch (e) {
-    return null;
+    // JSON parse failed — return the raw JSON string so caller can report
+    return { json: null, explanation, parseError: e.message, rawJson: jsonStr };
   }
 }
