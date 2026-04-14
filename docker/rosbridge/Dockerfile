@@ -1,7 +1,8 @@
 FROM ros:jazzy-ros-core
 
 # Install rosbridge suite
-RUN apt-get update && apt-get install -y \
+# upgrade first to sync base-image DDS/fastcdr libs with newly installed packages
+RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     ros-jazzy-rosbridge-suite \
     ros-jazzy-ros-gz-interfaces \
     && rm -rf /var/lib/apt/lists/*
