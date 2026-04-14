@@ -9,12 +9,10 @@ import { registerPackage, getAllPackageToolboxXml } from '../packages/PackageLoa
 import esp32Package from '../packages/builtin/esp32.json';
 import vehiclePackage from '../packages/builtin/vehicle.json';
 import ur5Package from '../packages/builtin/ur5.json';
-import rgbLedPackage from '../packages/builtin/rgb_led.json';
 
 registerPackage(esp32Package);
 registerPackage(vehiclePackage);
 registerPackage(ur5Package);
-registerPackage(rgbLedPackage);
 
 // Build toolbox XML from core categories + loaded packages
 export function buildToolbox() {

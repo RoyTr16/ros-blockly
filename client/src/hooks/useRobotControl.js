@@ -16,6 +16,16 @@ const useRobotControl = () => {
       if (!window.rosBlockly) window.rosBlockly = {};
       window.rosBlockly.startTime = Date.now();
 
+      // Reset multi-instance ID counters so each run starts from 0
+      window.rosBlockly._usNextId = 0;
+      window.rosBlockly._rgbNextId = 0;
+
+      // Unsubscribe any leftover ultrasonic subscriptions from previous runs
+      if (window.rosBlockly._usSubs) {
+        Object.values(window.rosBlockly._usSubs).forEach(s => s.unsubscribe());
+        window.rosBlockly._usSubs = {};
+      }
+
       // Helper function for waiting
       const wait = (seconds) => new Promise(resolve => setTimeout(resolve, seconds * 1000));
 
