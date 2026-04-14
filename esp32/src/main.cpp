@@ -7,19 +7,38 @@
 #include <rclc/executor.h>
 #include <rmw_microros/rmw_microros.h>
 #include <std_msgs/msg/int32.h>
-#include <FastLED.h>
+
+#ifdef HAS_WS2812
+  #include <FastLED.h>
+  #define NUM_LEDS 1
+  CRGB leds[NUM_LEDS];
+#endif
 
 // --- Configuration ---
 #include "secrets.h"  // Copy secrets.example.h to secrets.h and fill in your values
 
-#define RGB_LED_PIN   48
-#define NUM_LEDS      1
-#define PING_INTERVAL_MS  2000  // Check agent connectivity every 2 seconds
-#define PING_TIMEOUT_MS   500   // Timeout for each ping attempt
-#define PING_ATTEMPTS     3     // Number of ping attempts before declaring lost
+// LED_PIN is defined via build_flags in platformio.ini
+// ESP32-S3-DevKitC: GPIO 48 (on-board WS2812, HAS_WS2812=1)
+// ESP32-WROOM-32:   GPIO 2  (built-in blue LED, on/off only)
+#define PING_INTERVAL_MS  2000
+#define PING_TIMEOUT_MS   500
+#define PING_ATTEMPTS     3
 
-CRGB leds[NUM_LEDS];
-CRGB userColor = CRGB::Black;  // Track user-set color separately from status LED
+// --- LED abstraction ---
+void setLed(uint8_t r, uint8_t g, uint8_t b) {
+#ifdef HAS_WS2812
+  leds[0] = CRGB(r, g, b);
+  FastLED.show();
+#else
+  // Plain LED: on if any color component is non-zero
+  digitalWrite(LED_PIN, (r || g || b) ? HIGH : LOW);
+#endif
+}
+
+void blinkLed(uint8_t r, uint8_t g, uint8_t b, unsigned long interval) {
+  bool on = (millis() / interval) % 2;
+  if (on) setLed(r, g, b); else setLed(0, 0, 0);
+}
 
 rcl_subscription_t subscriber;
 std_msgs__msg__Int32 msg;
@@ -43,15 +62,12 @@ void subscription_callback(const void * msgin) {
   int32_t color = msg->data;
 
   if (color == 0) {
-    userColor = CRGB::Black;
-    leds[0] = CRGB::Black;
+    setLed(0, 0, 0);
     Serial.println("LED OFF");
   } else {
-    userColor = CRGB((color >> 16) & 0xFF, (color >> 8) & 0xFF, color & 0xFF);
-    leds[0] = userColor;
+    setLed((color >> 16) & 0xFF, (color >> 8) & 0xFF, color & 0xFF);
     Serial.printf("LED color: #%06X\n", color);
   }
-  FastLED.show();
 }
 
 bool createEntities() {
@@ -82,10 +98,13 @@ void destroyEntities() {
 void setup() {
   Serial.begin(115200);
 
-  FastLED.addLeds<WS2812, RGB_LED_PIN, GRB>(leds, NUM_LEDS);
+#ifdef HAS_WS2812
+  FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
   FastLED.setBrightness(30);
-  leds[0] = CRGB::Blue;  // Blue = waiting for agent
-  FastLED.show();
+#else
+  pinMode(LED_PIN, OUTPUT);
+#endif
+  setLed(0, 0, 255);  // Blue = waiting for agent
 
   Serial.println("Connecting to WiFi + micro-ROS Agent...");
   set_microros_wifi_transports(WIFI_SSID, WIFI_PASSWORD, AGENT_IP, AGENT_PORT);
@@ -96,9 +115,7 @@ void setup() {
 void loop() {
   switch (state) {
     case WAITING_AGENT:
-      // Blink blue while waiting for agent
-      leds[0] = (millis() / 500) % 2 ? CRGB::Blue : CRGB::Black;
-      FastLED.show();
+      blinkLed(0, 0, 255, 500);  // Blink blue
       if (rmw_uros_ping_agent(PING_TIMEOUT_MS, PING_ATTEMPTS) == RMW_RET_OK) {
         state = AGENT_AVAILABLE;
         Serial.println("Agent found!");
@@ -110,8 +127,7 @@ void loop() {
       if (createEntities()) {
         state = AGENT_CONNECTED;
         agentConnected = true;
-        leds[0] = CRGB::Green;
-        FastLED.show();
+        setLed(0, 255, 0);  // Green = connected
         Serial.println("micro-ROS connected! Listening on /esp32/led");
       } else {
         state = WAITING_AGENT;
@@ -134,9 +150,7 @@ void loop() {
       break;
 
     case AGENT_DISCONNECTED:
-      // Blink yellow = was connected, lost agent
-      leds[0] = (millis() / 300) % 2 ? CRGB::Yellow : CRGB::Black;
-      FastLED.show();
+      blinkLed(255, 255, 0, 300);  // Blink yellow
       destroyEntities();
       state = WAITING_AGENT;
       Serial.println("Reconnecting...");
