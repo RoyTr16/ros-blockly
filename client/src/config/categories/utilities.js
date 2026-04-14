@@ -5,10 +5,8 @@ export const utilitiesCategory = `
   </block>
   <block type="utilities_elapsed_time"></block>
   <sep gap="20"></sep>
-  <block type="utilities_setup_graph">
-    <field name="X_LABEL">Time (s)</field>
-    <field name="Y_LABEL">Distance (cm)</field>
-  </block>
+  <block type="utilities_setup_graph"></block>
   <block type="utilities_plot_point"></block>
+  <block type="utilities_graph_viewer"></block>
 </category>
 `;

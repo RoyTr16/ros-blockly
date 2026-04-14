@@ -56,9 +56,9 @@ const useRobotControl = () => {
 
     // Clear graph data
     if (window.rosBlockly) {
-      window.rosBlockly.graphData = null;
+      window.rosBlockly.graphs = {};
       if (window.rosBlockly.onGraphUpdate) {
-        window.rosBlockly.onGraphUpdate(null);
+        window.rosBlockly.onGraphUpdate();
       }
     }
 

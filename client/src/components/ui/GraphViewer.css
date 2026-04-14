@@ -1,21 +1,31 @@
-.graph-viewer-container {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
+.graph-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+  overflow: hidden;
 }
 
-.graph-viewer-container h3 {
-  margin-top: 0;
-  margin-bottom: 10px;
-  font-size: 1.1rem;
-  color: #333;
-}
-
-.graph-canvas-wrapper {
+.graph-panel {
+  position: absolute;
+  pointer-events: auto;
+  width: 320px;
+  background: white;
   border: 1px solid #ccc;
-  border-radius: 4px;
-  padding: 8px;
-  background-color: #fafafa;
-  height: 200px;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  padding: 6px 10px 10px;
+}
+
+.graph-panel-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #555;
+  margin-bottom: 4px;
+  text-align: center;
+}
+
+.graph-panel-canvas {
+  height: 180px;
   position: relative;
 }

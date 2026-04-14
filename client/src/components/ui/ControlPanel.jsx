@@ -2,7 +2,6 @@ import React from 'react';
 import CodeDisplay from './CodeDisplay';
 import ActionButtons from './ActionButtons';
 import LogViewer from './LogViewer';
-import GraphViewer from './GraphViewer';
 import { useRos } from '../../context/RosContext';
 import './ControlPanel.css';
 
@@ -19,7 +18,6 @@ const ControlPanel = ({ generatedCode, onRun, onReset, onSave, onLoad }) => {
         onSave={onSave}
         onLoad={onLoad}
       />
-      <GraphViewer />
       <LogViewer logs={logs} />
     </div>
   );

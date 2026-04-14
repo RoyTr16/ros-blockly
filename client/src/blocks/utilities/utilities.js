@@ -36,41 +36,75 @@ javascriptGenerator.forBlock['utilities_elapsed_time'] = function () {
   return [code, Order.DIVISION];
 };
 
-// --- Setup Graph ---
+// --- Graph color options ---
+const GRAPH_COLORS = [
+  ['Blue', '#4285f4'],
+  ['Red', '#ea4335'],
+  ['Green', '#34a853'],
+  ['Orange', '#fbbc05'],
+  ['Purple', '#9334e6'],
+  ['Cyan', '#00bcd4'],
+  ['Pink', '#e91e63'],
+];
+
+const GRAPH_STYLES = [
+  ['Line', 'line'],
+  ['Scatter', 'scatter'],
+];
+
+// --- Setup Graph → variable ---
 Blockly.Blocks['utilities_setup_graph'] = {
   init: function () {
     this.appendDummyInput()
       .appendField('Setup Graph')
+      .appendField('→')
+      .appendField(new Blockly.FieldVariable('myGraph'), 'VAR');
+    this.appendDummyInput()
       .appendField('X:')
       .appendField(new Blockly.FieldTextInput('Time (s)'), 'X_LABEL')
       .appendField('Y:')
       .appendField(new Blockly.FieldTextInput('Distance (cm)'), 'Y_LABEL');
+    this.appendDummyInput()
+      .appendField('Color:')
+      .appendField(new Blockly.FieldDropdown(GRAPH_COLORS), 'COLOR')
+      .appendField('Style:')
+      .appendField(new Blockly.FieldDropdown(GRAPH_STYLES), 'STYLE');
     this.setPreviousStatement(true, null);
     this.setNextStatement(true, null);
     this.setColour(260);
-    this.setTooltip('Initialize a 2D graph with given axis labels.');
+    this.setTooltip('Create a graph config and store it in a variable.');
   },
 };
 
 javascriptGenerator.forBlock['utilities_setup_graph'] = function (block) {
+  const varName = javascriptGenerator.getVariableName(block.getFieldValue('VAR'));
+  const displayName = block.getField('VAR').getText();
   const xLabel = block.getFieldValue('X_LABEL');
   const yLabel = block.getFieldValue('Y_LABEL');
+  const color = block.getFieldValue('COLOR');
+  const style = block.getFieldValue('STYLE');
+
   return `
     {
+      ${varName} = { xLabel: ${JSON.stringify(xLabel)}, yLabel: ${JSON.stringify(yLabel)}, color: ${JSON.stringify(color)}, style: ${JSON.stringify(style)}, x: [], y: [] };
       if (!window.rosBlockly) window.rosBlockly = {};
-      window.rosBlockly.graphData = { x: [], y: [], xLabel: ${JSON.stringify(xLabel)}, yLabel: ${JSON.stringify(yLabel)} };
-      if (window.rosBlockly.onGraphUpdate) window.rosBlockly.onGraphUpdate(window.rosBlockly.graphData);
-      log('Graph initialized: ' + ${JSON.stringify(xLabel)} + ' vs ' + ${JSON.stringify(yLabel)});
+      if (!window.rosBlockly.graphs) window.rosBlockly.graphs = {};
+      window.rosBlockly.graphs[${JSON.stringify(displayName)}] = ${varName};
+      if (window.rosBlockly.onGraphUpdate) window.rosBlockly.onGraphUpdate();
+      log('Graph "${displayName}" initialized');
     }
   `;
 };
 
-// --- Plot Point ---
+// --- Plot Point to graph variable ---
 Blockly.Blocks['utilities_plot_point'] = {
   init: function () {
+    this.appendDummyInput()
+      .appendField('Plot to')
+      .appendField(new Blockly.FieldVariable('myGraph'), 'VAR');
     this.appendValueInput('X')
       .setCheck('Number')
-      .appendField('Plot X:');
+      .appendField('X:');
     this.appendValueInput('Y')
       .setCheck('Number')
       .appendField('Y:');
@@ -78,20 +112,37 @@ Blockly.Blocks['utilities_plot_point'] = {
     this.setPreviousStatement(true, null);
     this.setNextStatement(true, null);
     this.setColour(260);
-    this.setTooltip('Add a data point to the graph.');
+    this.setTooltip('Add a data point to the specified graph.');
   },
 };
 
 javascriptGenerator.forBlock['utilities_plot_point'] = function (block) {
+  const varName = javascriptGenerator.getVariableName(block.getFieldValue('VAR'));
   const x = javascriptGenerator.valueToCode(block, 'X', Order.NONE) || '0';
   const y = javascriptGenerator.valueToCode(block, 'Y', Order.NONE) || '0';
+
   return `
     {
-      if (window.rosBlockly && window.rosBlockly.graphData) {
-        window.rosBlockly.graphData.x.push(${x});
-        window.rosBlockly.graphData.y.push(${y});
-        if (window.rosBlockly.onGraphUpdate) window.rosBlockly.onGraphUpdate(window.rosBlockly.graphData);
+      if (${varName} && ${varName}.x) {
+        ${varName}.x.push(${x});
+        ${varName}.y.push(${y});
+        if (window.rosBlockly && window.rosBlockly.onGraphUpdate) window.rosBlockly.onGraphUpdate();
       }
     }
   `;
+};
+
+// --- Graph Viewer (visual only — no generated code) ---
+Blockly.Blocks['utilities_graph_viewer'] = {
+  init: function () {
+    this.appendDummyInput()
+      .appendField('Show Graph')
+      .appendField(new Blockly.FieldVariable('myGraph'), 'VAR');
+    this.setColour(260);
+    this.setTooltip('Display a live chart for this graph variable. Place multiple to see multiple graphs.');
+  },
+};
+
+javascriptGenerator.forBlock['utilities_graph_viewer'] = function () {
+  return '';
 };

@@ -22,6 +22,7 @@ const BlocklyComponent = forwardRef((props, ref) => {
   const workspace = useRef(null);
 
   useImperativeHandle(ref, () => ({
+    getWorkspace: () => workspace.current,
     save: () => {
       if (!workspace.current) return;
       const state = Blockly.serialization.workspaces.save(workspace.current);
