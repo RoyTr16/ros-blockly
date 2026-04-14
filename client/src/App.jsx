@@ -8,7 +8,7 @@ import useRobotControl from './hooks/useRobotControl';
 import './App.css';
 
 const AppContent = () => {
-  const { generatedCode, setGeneratedCode, runCode, resetRobot } = useRobotControl();
+  const { generatedCode, setGeneratedCode, runCode, stopExecution, running, resetRobot } = useRobotControl();
   const blocklyRef = useRef(null);
   const [panelOpen, setPanelOpen] = useState(false);
 
@@ -23,7 +23,9 @@ const AppContent = () => {
     <div className="App">
       <Header
         onRun={runCode}
+        onStop={stopExecution}
         onReset={resetRobot}
+        running={running}
         onSave={handleSave}
         onLoad={handleLoad}
         panelOpen={panelOpen}
@@ -52,6 +54,7 @@ const AppContent = () => {
       {panelOpen && (
         <ControlPanel
           generatedCode={generatedCode}
+          blocklyRef={blocklyRef}
           onClose={() => setPanelOpen(false)}
         />
       )}

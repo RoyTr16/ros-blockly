@@ -1,10 +1,11 @@
 import React from 'react';
 import CodeDisplay from './CodeDisplay';
 import LogViewer from './LogViewer';
+import FunctionPanel from './FunctionPanel';
 import { useRos } from '../../context/RosContext';
 import './ControlPanel.css';
 
-const ControlPanel = ({ generatedCode, onClose }) => {
+const ControlPanel = ({ generatedCode, blocklyRef, onClose }) => {
   const { logs } = useRos();
 
   return (
@@ -19,6 +20,7 @@ const ControlPanel = ({ generatedCode, onClose }) => {
         </button>
       </div>
       <CodeDisplay code={generatedCode} />
+      <FunctionPanel blocklyRef={blocklyRef} />
       <LogViewer logs={logs} />
     </div>
   );

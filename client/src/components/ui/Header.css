@@ -91,6 +91,15 @@
   box-shadow: 0 0 12px rgba(248, 113, 113, 0.2);
 }
 
+.header-btn-stop {
+  background: rgba(251, 146, 60, 0.2);
+  color: #fb923c;
+}
+.header-btn-stop:hover:not(.disabled) {
+  background: rgba(251, 146, 60, 0.3);
+  box-shadow: 0 0 12px rgba(251, 146, 60, 0.2);
+}
+
 .header-btn-save {
   color: var(--accent-blue);
 }

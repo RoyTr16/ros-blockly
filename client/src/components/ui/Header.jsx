@@ -2,7 +2,7 @@ import React from 'react';
 import { useRos } from '../../context/RosContext';
 import './Header.css';
 
-const Header = ({ onRun, onReset, onSave, onLoad, panelOpen, onTogglePanel }) => {
+const Header = ({ onRun, onStop, onReset, running, onSave, onLoad, panelOpen, onTogglePanel }) => {
   const { connected } = useRos();
 
   return (
@@ -18,6 +18,15 @@ const Header = ({ onRun, onReset, onSave, onLoad, panelOpen, onTogglePanel }) =>
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
           Run
+        </button>
+        <button
+          className={`header-btn header-btn-stop ${!running ? 'disabled' : ''}`}
+          onClick={onStop}
+          disabled={!running}
+          title="Stop Execution"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+          Stop
         </button>
         <button
           className={`header-btn header-btn-reset ${!connected ? 'disabled' : ''}`}

@@ -4,6 +4,7 @@ import * as Blockly from 'blockly/core';
 import { javascriptGenerator } from 'blockly/javascript';
 import 'blockly/blocks'; // Import standard blocks (math, logic, etc.)
 import '../../blocks/utilities/utilities'; // Core blocks (not a package)
+import { saveFunction, exportFunction } from '../../functions/FunctionLibrary';
 
 import * as En from 'blockly/msg/en';
 Blockly.setLocale(En);
@@ -68,6 +69,41 @@ const BlocklyComponent = forwardRef((props, ref) => {
       renderer: 'zelos',
       ...rest,
     });
+
+    // Register context menu items for function save/export (guard against duplicates on HMR)
+    const isProcedureDef = (scope) => {
+      const block = scope.block;
+      return block && (block.type === 'procedures_defnoreturn' || block.type === 'procedures_defreturn');
+    };
+
+    const registry = Blockly.ContextMenuRegistry.registry;
+
+    if (!registry.getItem('save_function_to_library')) {
+      registry.register({
+        id: 'save_function_to_library',
+        weight: 200,
+        displayText: () => 'Save to Function Library',
+        preconditionFn: (scope) => isProcedureDef(scope) ? 'enabled' : 'hidden',
+        callback: (scope) => {
+          saveFunction(workspace.current, scope.block.id);
+          window.dispatchEvent(new Event('functionLibraryChanged'));
+        },
+        scopeType: Blockly.ContextMenuRegistry.ScopeType.BLOCK,
+      });
+    }
+
+    if (!registry.getItem('export_function_file')) {
+      registry.register({
+        id: 'export_function_file',
+        weight: 201,
+        displayText: () => 'Export as .func.json',
+        preconditionFn: (scope) => isProcedureDef(scope) ? 'enabled' : 'hidden',
+        callback: (scope) => {
+          exportFunction(workspace.current, scope.block.id);
+        },
+        scopeType: Blockly.ContextMenuRegistry.ScopeType.BLOCK,
+      });
+    }
 
     if (initialXml) {
       Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(initialXml), workspace.current);

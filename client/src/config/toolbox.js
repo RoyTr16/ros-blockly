@@ -2,6 +2,7 @@ import { logicCategory } from './categories/logic';
 import { loopsCategory } from './categories/loops';
 import { mathCategory } from './categories/math';
 import { variablesCategory } from './categories/variables';
+import { functionsCategory } from './categories/functions';
 import { utilitiesCategory } from './categories/utilities';
 import { registerPackage, getAllPackageToolboxXml } from '../packages/PackageLoader';
 
@@ -22,6 +23,7 @@ export function buildToolbox() {
   ${loopsCategory}
   ${mathCategory}
   ${variablesCategory}
+  ${functionsCategory}
   ${utilitiesCategory}
   <sep></sep>
   ${getAllPackageToolboxXml()}

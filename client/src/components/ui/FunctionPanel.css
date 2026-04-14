@@ -1,0 +1,125 @@
+.function-panel {
+  margin-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 12px;
+}
+
+.function-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.function-panel-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+
+.function-panel-import {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.function-panel-import:hover {
+  color: var(--text-primary);
+  border-color: var(--accent-indigo);
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.function-panel-empty {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  padding: 12px 0;
+  line-height: 1.5;
+}
+
+.function-panel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.function-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: rgba(99, 102, 241, 0.04);
+  border: 1px solid transparent;
+  transition: all 0.15s;
+}
+
+.function-item:hover {
+  border-color: var(--border-color);
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.function-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.function-item-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--accent-indigo);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.function-item-meta {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.function-item-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.function-item-actions button {
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.function-item-actions button:hover {
+  color: var(--text-primary);
+  border-color: var(--accent-indigo);
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.function-item-actions button.delete {
+  font-size: 0.85rem;
+  padding: 2px 5px;
+  line-height: 1;
+}
+
+.function-item-actions button.delete:hover {
+  color: #f87171;
+  border-color: #f87171;
+  background: rgba(248, 113, 113, 0.1);
+}

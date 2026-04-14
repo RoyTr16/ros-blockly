@@ -1,10 +1,21 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import ROSLIB from 'roslib';
 import { useRos } from '../context/RosContext';
 
 const useRobotControl = () => {
   const { ros, connected, addLog } = useRos();
   const [generatedCode, setGeneratedCode] = useState('');
+  const [running, setRunning] = useState(false);
+  const abortRef = useRef(null);
+
+  const stopExecution = () => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+    setRunning(false);
+    addLog('Execution stopped');
+  };
 
   const runCode = () => {
     if (!ros || !connected) {
@@ -12,6 +23,14 @@ const useRobotControl = () => {
       return;
     }
     try {
+      // Abort any previous run
+      if (abortRef.current) {
+        abortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      abortRef.current = abortController;
+      setRunning(true);
+
       // Record start time for elapsed-time blocks
       if (!window.rosBlockly) window.rosBlockly = {};
       window.rosBlockly.startTime = Date.now();
@@ -26,16 +45,22 @@ const useRobotControl = () => {
         window.rosBlockly._usSubs = {};
       }
 
-      // Helper function for waiting
-      const wait = (seconds) => new Promise(resolve => setTimeout(resolve, seconds * 1000));
+      // Helper function for waiting — checks abort signal
+      const signal = abortController.signal;
+      const wait = (seconds) => new Promise((resolve, reject) => {
+        if (signal.aborted) return reject(new DOMException('Aborted', 'AbortError'));
+        const timer = setTimeout(resolve, seconds * 1000);
+        signal.addEventListener('abort', () => { clearTimeout(timer); reject(new DOMException('Aborted', 'AbortError')); }, { once: true });
+      });
 
       // Execute the generated code inside an async wrapper
       // The generated code assumes 'ros', 'ROSLIB', 'log', and 'wait' are available
       const asyncCode = `
-        (async () => {
+        return (async () => {
           try {
             ${generatedCode}
           } catch (err) {
+            if (err.name === 'AbortError') return;
             console.error(err);
             log('Error: ' + err.message);
           }
@@ -43,11 +68,17 @@ const useRobotControl = () => {
       `;
 
       const runBlocklyCode = new Function('ros', 'ROSLIB', 'log', 'wait', asyncCode);
-      runBlocklyCode(ros, ROSLIB, addLog, wait);
+      const promise = runBlocklyCode(ros, ROSLIB, addLog, wait);
+      if (promise && promise.then) {
+        promise.then(() => {
+          if (!signal.aborted) setRunning(false);
+        });
+      }
       addLog('Code executed successfully');
     } catch (e) {
       console.error(e);
       addLog(`Error executing code: ${e.message}`);
+      setRunning(false);
     }
   };
 
@@ -149,6 +180,8 @@ const useRobotControl = () => {
     generatedCode,
     setGeneratedCode,
     runCode,
+    stopExecution,
+    running,
     resetRobot
   };
 };
