@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import ROSLIB from 'roslib';
 import { useRos } from '../context/RosContext';
+import { getAllResetActions } from '../packages/PackageLoader';
 
 const useRobotControl = () => {
   const { ros, connected, addLog } = useRos();
@@ -88,9 +89,15 @@ const useRobotControl = () => {
       return;
     }
 
-    // Stop the robot first (clear interval if any)
+    // Stop any running execution
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+      setRunning(false);
+    }
+
+    // Clear interval-based movement
     if (window.rosBlockly && window.rosBlockly.interval) {
-      console.log("Clearing interval (Reset):", window.rosBlockly.interval);
       clearInterval(window.rosBlockly.interval);
       window.rosBlockly.interval = null;
     }
@@ -103,77 +110,42 @@ const useRobotControl = () => {
       }
     }
 
-    // Unsubscribe ultrasonic sensor and disable it
+    // Unsubscribe all ultrasonic subscriptions
+    if (window.rosBlockly && window.rosBlockly._usSubs) {
+      Object.values(window.rosBlockly._usSubs).forEach(s => s.unsubscribe());
+      window.rosBlockly._usSubs = {};
+    }
     if (window.rosBlockly && window.rosBlockly.ultrasonicSub) {
       window.rosBlockly.ultrasonicSub.unsubscribe();
       window.rosBlockly.ultrasonicSub = null;
     }
-    const ultrasonicConfig = new ROSLIB.Topic({
-      ros: ros,
-      name: '/esp32/ultrasonic_config',
-      messageType: 'std_msgs/msg/Int32'
-    });
-    ultrasonicConfig.publish(new ROSLIB.Message({ data: 0 }));
 
-    // Stop command
-    const cmdVel = new ROSLIB.Topic({
-      ros: ros,
-      name: '/cmd_vel',
-      messageType: 'geometry_msgs/msg/Twist'
-    });
-    const stopTwist = new ROSLIB.Message({
-      linear: { x: 0, y: 0, z: 0 },
-      angular: { x: 0, y: 0, z: 0 }
-    });
-    cmdVel.publish(stopTwist);
-
-    // Reset Pose using Service
-    const setPoseClient = new ROSLIB.Service({
-      ros: ros,
-      name: '/world/empty/set_pose',
-      serviceType: 'ros_gz_interfaces/srv/SetEntityPose'
-    });
-
-    const request = new ROSLIB.ServiceRequest({
-      entity: {
-        name: 'vehicle_blue',
-        type: 2 // MODEL
-      },
-      pose: {
-        position: { x: 0, y: 0, z: 0.325 },
-        orientation: { x: 0, y: 0, z: 0, w: 1 }
+    // Execute all package-defined reset actions
+    const actions = getAllResetActions();
+    for (const action of actions) {
+      if (action.topic) {
+        const topic = new ROSLIB.Topic({
+          ros: ros,
+          name: action.topic,
+          messageType: action.type,
+        });
+        topic.publish(new ROSLIB.Message(action.data));
+        addLog(`Reset: published to ${action.topic}`);
+      } else if (action.service) {
+        const client = new ROSLIB.Service({
+          ros: ros,
+          name: action.service,
+          serviceType: action.type,
+        });
+        client.callService(new ROSLIB.ServiceRequest(action.request), (result) => {
+          if (result.success) {
+            addLog(`Reset: ${action.service} (Success)`);
+          }
+        });
       }
-    });
+    }
 
-    setPoseClient.callService(request, (result) => {
-      if (result.success) {
-        addLog("Reset Vehicle Position (Success)");
-      } else {
-        // Only log failure if we expected a vehicle (could be running UR5)
-        // addLog("Reset Vehicle Position (Failed)");
-      }
-    });
-
-    // Reset UR5 (Move to Home)
-    const ur5Topic = new ROSLIB.Topic({
-      ros: ros,
-      name: '/ur5/trajectory',
-      messageType: 'trajectory_msgs/msg/JointTrajectory'
-    });
-
-    const homePoint = new ROSLIB.Message({
-      joint_names: [
-        'ur5_rg2::shoulder_pan_joint', 'ur5_rg2::shoulder_lift_joint', 'ur5_rg2::elbow_joint',
-        'ur5_rg2::wrist_1_joint', 'ur5_rg2::wrist_2_joint', 'ur5_rg2::wrist_3_joint'
-      ],
-      points: [{
-        positions: [0, 0, 0, 0, 0, 0], // All zeros as requested
-        time_from_start: { sec: 2, nanosec: 0 }
-      }]
-    });
-
-    ur5Topic.publish(homePoint);
-    addLog("Sent UR5 Home Command");
+    addLog('Reset complete');
   };
 
   return {

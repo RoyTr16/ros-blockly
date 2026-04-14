@@ -215,6 +215,11 @@
     }
   ],
 
+  "reset": [
+    { "topic": "/esp32/ultrasonic_config", "type": "std_msgs/msg/Int32", "data": { "data": 0 } },
+    { "topic": "/esp32/rgb_led_set", "type": "std_msgs/msg/Int32", "data": { "data": 0 } }
+  ],
+
   "category": {
     "name": "ESP32",
     "colour": 15,

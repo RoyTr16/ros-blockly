@@ -76,6 +76,14 @@
     }
   ],
 
+"reset": [
+    { "topic": "/ur5/trajectory", "type": "trajectory_msgs/msg/JointTrajectory", "data": {
+        "joint_names": ["ur5_rg2::shoulder_pan_joint","ur5_rg2::shoulder_lift_joint","ur5_rg2::elbow_joint","ur5_rg2::wrist_1_joint","ur5_rg2::wrist_2_joint","ur5_rg2::wrist_3_joint"],
+        "points": [{"positions":[0,0,0,0,0,0],"time_from_start":{"sec":2,"nanosec":0}}]
+      }
+    }
+  ],
+
   "category": {
     "name": "UR5 Arm",
     "colour": 230,

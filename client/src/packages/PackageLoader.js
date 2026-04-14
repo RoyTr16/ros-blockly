@@ -113,6 +113,7 @@ export function registerPackage(pkg) {
   loadedPackages[pkg.id] = {
     pkg,
     toolboxXml,
+    reset: pkg.reset || [],
   };
 
   return toolboxXml;
@@ -138,4 +139,8 @@ export function getAllPackageToolboxXml() {
   return Object.values(loadedPackages)
     .map(entry => entry.toolboxXml)
     .join('\n');
+}
+
+export function getAllResetActions() {
+  return Object.values(loadedPackages).flatMap(entry => entry.reset);
 }

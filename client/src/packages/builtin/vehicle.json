@@ -68,6 +68,11 @@
     }
   ],
 
+  "reset": [
+    { "topic": "/cmd_vel", "type": "geometry_msgs/msg/Twist", "data": { "linear": {"x":0,"y":0,"z":0}, "angular": {"x":0,"y":0,"z":0} } },
+    { "service": "/world/empty/set_pose", "type": "ros_gz_interfaces/srv/SetEntityPose", "request": { "entity": {"name":"vehicle_blue","type":2}, "pose": {"position":{"x":0,"y":0,"z":0.325},"orientation":{"x":0,"y":0,"z":0,"w":1}} } }
+  ],
+
   "category": {
     "name": "Vehicle",
     "colour": 230,
