@@ -2,6 +2,7 @@ import React from 'react';
 import CodeDisplay from './CodeDisplay';
 import LogViewer from './LogViewer';
 import FunctionPanel from './FunctionPanel';
+import AiChat from './AiChat';
 import { useRos } from '../../context/RosContext';
 import './ControlPanel.css';
 
@@ -20,6 +21,7 @@ const ControlPanel = ({ generatedCode, blocklyRef, onClose }) => {
         </button>
       </div>
       <CodeDisplay code={generatedCode} />
+      <AiChat blocklyRef={blocklyRef} />
       <FunctionPanel blocklyRef={blocklyRef} />
       <LogViewer logs={logs} />
     </div>

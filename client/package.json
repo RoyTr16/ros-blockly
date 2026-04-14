@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "blockly": "^11.0.0",
     "chart.js": "^4.5.1",
     "prismjs": "^1.30.0",
