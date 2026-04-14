@@ -1,31 +1,52 @@
 .app-header {
-  padding: 10px 20px;
-  background-color: #282c34;
-  color: white;
+  padding: 12px 24px;
+  background: var(--gradient-header);
+  color: var(--text-primary);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  border-bottom: 1px solid var(--border-color);
+  position: relative;
+  z-index: 10;
 }
 
 .app-header h1 {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, #e8eaf0 0%, #a5b4fc 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .status-container {
-  font-size: 1rem;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .status-indicator {
-  font-weight: bold;
-  margin-left: 8px;
+  font-weight: 600;
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  transition: all 0.3s ease;
 }
 
 .status-indicator.connected {
-  color: #4CAF50;
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.12);
+  box-shadow: 0 0 12px rgba(52, 211, 153, 0.2);
 }
 
 .status-indicator.disconnected {
-  color: #f44336;
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.12);
+  box-shadow: 0 0 12px rgba(248, 113, 113, 0.15);
 }

@@ -10,17 +10,18 @@
   position: absolute;
   pointer-events: auto;
   width: 320px;
-  background: white;
-  border: 1px solid #ccc;
-  border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
   padding: 6px 10px 10px;
+  backdrop-filter: blur(8px);
 }
 
 .graph-panel-title {
   font-size: 0.8rem;
   font-weight: 600;
-  color: #555;
+  color: var(--text-secondary);
   margin-bottom: 4px;
   text-align: center;
 }

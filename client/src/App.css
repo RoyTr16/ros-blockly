@@ -2,17 +2,104 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: var(--font-sans);
+  background: var(--bg-primary);
 }
 
 .main-content {
   display: flex;
   flex: 1;
-  overflow: hidden; /* Prevent body scroll */
+  overflow: hidden;
 }
 
 .blockly-container {
   flex: 2;
-  border-right: 1px solid #e0e0e0;
-  position: relative; /* For Blockly injection */
+  position: relative;
+  border-right: 1px solid var(--border-color);
+}
+
+/* === Blockly Toolbox Overrides === */
+
+/* Category tree rows */
+.blocklyTreeRow {
+  padding: 6px 12px !important;
+  margin: 2px 4px !important;
+  border-radius: 8px !important;
+  transition: background 0.15s ease !important;
+}
+
+.blocklyTreeRow:hover {
+  background: rgba(99, 102, 241, 0.12) !important;
+}
+
+.blocklyTreeRowContentContainer {
+  gap: 8px;
+}
+
+/* Category label text — fix white-on-white */
+.blocklyTreeLabel {
+  color: #e8eaf0 !important;
+  font-family: 'Inter', system-ui, sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.01em !important;
+}
+
+.blocklyTreeSelected .blocklyTreeLabel {
+  color: #ffffff !important;
+  font-weight: 600 !important;
+}
+
+.blocklyTreeSelected > .blocklyTreeRowContentContainer {
+  background: rgba(99, 102, 241, 0.18) !important;
+  border-radius: 8px;
+}
+
+/* Toolbox container */
+.blocklyToolboxDiv {
+  background: #1a1d2e !important;
+  border-right: 1px solid rgba(99, 102, 241, 0.12) !important;
+  padding: 8px 0 !important;
+}
+
+/* Flyout */
+.blocklyFlyoutBackground {
+  fill: #1e2235 !important;
+  fill-opacity: 0.97 !important;
+}
+
+/* Workspace grid dots */
+.blocklyMainBackground {
+  fill: #13151f !important;
+}
+
+/* Block shadow/glow effect */
+.blocklyDraggable:not(.blocklyDisabled) > .blocklyPath {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+/* Scrollbar inside Blockly */
+.blocklyScrollbarHandle {
+  fill: #3a3f5c !important;
+  rx: 4 !important;
+}
+
+/* Trash can */
+.blocklyTrash {
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+.blocklyTrash:hover {
+  opacity: 0.9;
+}
+
+/* Category icon (the coloured square) */
+.blocklyTreeIcon {
+  border-radius: 3px !important;
+}
+
+/* Separator in toolbox */
+.blocklyTreeSeparator {
+  border-bottom: 1px solid rgba(99, 102, 241, 0.1) !important;
+  margin: 6px 12px !important;
 }

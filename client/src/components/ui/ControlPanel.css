@@ -3,8 +3,8 @@
   padding: 20px;
   display: flex;
   flex-direction: column;
-  background-color: #fff;
-  border-left: 1px solid #e0e0e0;
-  max-width: 400px; /* Optional: limit width on large screens */
+  background-color: var(--bg-secondary);
+  border-left: 1px solid var(--border-color);
+  max-width: 400px;
   min-width: 300px;
 }

@@ -1,10 +1,51 @@
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  /* --- Design Tokens --- */
+  --bg-primary: #0f1117;
+  --bg-secondary: #1a1d2e;
+  --bg-surface: #232740;
+  --bg-surface-hover: #2c3152;
+  --bg-input: #181b2a;
+
+  --text-primary: #e8eaf0;
+  --text-secondary: #9ea3b5;
+  --text-muted: #636880;
+
+  --accent-blue: #4f8cff;
+  --accent-indigo: #6366f1;
+  --accent-green: #34d399;
+  --accent-red: #f87171;
+  --accent-amber: #fbbf24;
+
+  --gradient-header: linear-gradient(135deg, #1e2a4a 0%, #2d1b69 100%);
+  --gradient-run: linear-gradient(135deg, #059669 0%, #34d399 100%);
+  --gradient-reset: linear-gradient(135deg, #dc2626 0%, #f87171 100%);
+  --gradient-save: linear-gradient(135deg, #2563eb 0%, #4f8cff 100%);
+  --gradient-load: linear-gradient(135deg, #d97706 0%, #fbbf24 100%);
+
+  --border-color: rgba(99, 102, 241, 0.15);
+  --border-subtle: rgba(255, 255, 255, 0.06);
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6);
+  --shadow-glow-green: 0 0 20px rgba(52, 211, 153, 0.3);
+  --shadow-glow-red: 0 0 20px rgba(248, 113, 113, 0.3);
+  --shadow-glow-blue: 0 0 20px rgba(79, 140, 255, 0.3);
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-pill: 50px;
+
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+
+  font-family: var(--font-sans);
   line-height: 1.5;
   font-weight: 400;
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  color-scheme: dark;
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -26,6 +67,22 @@ body {
 h1 {
   font-size: 3.2em;
   line-height: 1.1;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--bg-surface-hover);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
 
 button {

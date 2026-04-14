@@ -10,6 +10,7 @@ Blockly.setLocale(En);
 
 import { toolbox, buildToolbox } from '../../config/toolbox';
 import { registerPackage } from '../../packages/PackageLoader';
+import { darkTheme } from '../../config/blocklyTheme';
 
 const BlocklyComponent = forwardRef((props, ref) => {
   const blocklyDiv = useRef(null);
@@ -63,6 +64,8 @@ const BlocklyComponent = forwardRef((props, ref) => {
 
     workspace.current = Blockly.inject(blocklyDiv.current, {
       toolbox: toolbox,
+      theme: darkTheme,
+      renderer: 'zelos',
       ...rest,
     });
 
