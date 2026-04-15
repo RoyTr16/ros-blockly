@@ -35,15 +35,15 @@ export function resetChat() {
   chatSession = null;
 }
 
-// Sends a user message (optionally with current workspace context) and returns the raw response text
-export async function sendMessage(userMessage, currentWorkspaceJson = null) {
+// Sends a user message (optionally with current workspace code for context) and returns the raw response text
+export async function sendMessage(userMessage, currentWorkspaceCode = null) {
   if (!genAI) throw new Error('Gemini not initialized. Please set your API key.');
 
   const chat = getOrCreateChat();
 
   let fullMessage = userMessage;
-  if (currentWorkspaceJson) {
-    fullMessage += `\n\nCurrent workspace state:\n\`\`\`json\n${JSON.stringify(currentWorkspaceJson, null, 2)}\n\`\`\``;
+  if (currentWorkspaceCode) {
+    fullMessage += `\n\nCurrent program (generated JavaScript):\n\`\`\`javascript\n${currentWorkspaceCode}\n\`\`\``;
   }
 
   // Retry once on 429 rate limit

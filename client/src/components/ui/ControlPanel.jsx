@@ -21,7 +21,7 @@ const ControlPanel = ({ generatedCode, blocklyRef, onClose, onPreviewChange }) =
         </button>
       </div>
       <CodeDisplay code={generatedCode} />
-      <AiChat blocklyRef={blocklyRef} onPreviewChange={onPreviewChange} />
+      <AiChat blocklyRef={blocklyRef} generatedCode={generatedCode} onPreviewChange={onPreviewChange} />
       <FunctionPanel blocklyRef={blocklyRef} />
       <LogViewer logs={logs} />
     </div>

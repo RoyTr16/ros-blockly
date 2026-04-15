@@ -7,7 +7,7 @@ const API_KEY_STORAGE = 'gemini_api_key';
 
 const ENV_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
 
-const AiChat = ({ blocklyRef, onPreviewChange }) => {
+const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
   const [apiKey, setApiKey] = useState(() => localStorage.getItem(API_KEY_STORAGE) || ENV_KEY);
   const [keySet, setKeySet] = useState(() => {
     const saved = localStorage.getItem(API_KEY_STORAGE) || ENV_KEY;
@@ -304,17 +304,10 @@ const AiChat = ({ blocklyRef, onPreviewChange }) => {
     setPendingJson(null);
 
     try {
-      // Get current workspace state for context
-      let currentState = null;
-      const ws = blocklyRef?.current?.getWorkspace?.();
-      if (ws) {
-        const allBlocks = ws.getAllBlocks(false);
-        if (allBlocks.length > 0) {
-          currentState = Blockly.serialization.workspaces.save(ws);
-        }
-      }
+      // Get current generated code for context (compact JS instead of bulky JSON)
+      const currentCode = generatedCode?.trim() || null;
 
-      let responseText = await sendMessage(text, currentState);
+      let responseText = await sendMessage(text, currentCode);
       let extracted = extractBlocklyJson(responseText);
 
       if (!extracted) {
