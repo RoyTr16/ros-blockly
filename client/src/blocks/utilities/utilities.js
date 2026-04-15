@@ -243,3 +243,53 @@ Blockly.Blocks['utilities_graph_viewer'] = {
 javascriptGenerator.forBlock['utilities_graph_viewer'] = function () {
   return '';
 };
+
+// --- Override procedure generators to emit async functions ---
+// Blockly's built-in generators emit regular `function` declarations,
+// but our blocks use `await` (e.g. wait_seconds, ROS publishes).
+// We override all four procedure generators to emit async functions
+// and await their calls.
+
+javascriptGenerator.forBlock['procedures_defreturn'] = function (block, generator) {
+  const funcName = generator.getProcedureName(block.getFieldValue('NAME'));
+  const args = [];
+  const variables = block.getVars();
+  for (let i = 0; i < variables.length; i++) {
+    args[i] = generator.getVariableName(variables[i]);
+  }
+  let branch = '';
+  if (block.getInput('STACK')) {
+    branch = generator.statementToCode(block, 'STACK');
+  }
+  let returnValue = '';
+  if (block.getInput('RETURN')) {
+    returnValue = generator.valueToCode(block, 'RETURN', Order.NONE) || '';
+  }
+  if (returnValue) {
+    returnValue = generator.INDENT + 'return ' + returnValue + ';\n';
+  }
+  let code = 'async function ' + funcName + '(' + args.join(', ') + ') {\n' +
+    branch + returnValue + '}';
+  code = generator.scrub_(block, code);
+  generator.definitions_['%' + funcName] = code;
+  return null;
+};
+
+javascriptGenerator.forBlock['procedures_defnoreturn'] =
+  javascriptGenerator.forBlock['procedures_defreturn'];
+
+javascriptGenerator.forBlock['procedures_callreturn'] = function (block, generator) {
+  const funcName = generator.getProcedureName(block.getFieldValue('NAME'));
+  const args = [];
+  const variables = block.getVars();
+  for (let i = 0; i < variables.length; i++) {
+    args[i] = generator.valueToCode(block, 'ARG' + i, Order.NONE) || 'null';
+  }
+  const code = 'await ' + funcName + '(' + args.join(', ') + ')';
+  return [code, Order.AWAIT];
+};
+
+javascriptGenerator.forBlock['procedures_callnoreturn'] = function (block, generator) {
+  const tuple = generator.forBlock['procedures_callreturn'](block, generator);
+  return tuple[0] + ';\n';
+};
