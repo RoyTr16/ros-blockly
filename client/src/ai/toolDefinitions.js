@@ -22,16 +22,8 @@ export function buildToolDeclarations() {
         type: 'OBJECT',
         properties: {
           blocks: {
-            type: 'ARRAY',
-            description: 'Array of block chains. Each chain is an array of block objects to be executed sequentially. Multiple chains create separate stacks (e.g., function definitions separate from main code).',
-            items: {
-              type: 'ARRAY',
-              description: 'A sequential chain of blocks.',
-              items: {
-                type: 'OBJECT',
-                description: 'A block descriptor. Each block has a "type" and type-specific properties. See the system instructions for the full block reference.',
-              },
-            },
+            type: 'STRING',
+            description: 'A JSON string encoding the blocks array. Must be valid JSON. The top level is an array of chains. Each chain is an array of block objects executed sequentially. Example: [[{"type":"wait_seconds","seconds":1}]]. See the system instructions for the full block reference.',
           },
         },
         required: ['blocks'],
@@ -44,45 +36,8 @@ export function buildToolDeclarations() {
         type: 'OBJECT',
         properties: {
           operations: {
-            type: 'ARRAY',
-            description: 'Array of modification operations to apply in order.',
-            items: {
-              type: 'OBJECT',
-              description: 'A modification operation.',
-              properties: {
-                action: {
-                  type: 'STRING',
-                  description: 'The type of modification: "set_field" to change a field value, "set_input" to change a value input, "remove_block" to delete a block, "add_after" to insert blocks after a target.',
-                  enum: ['set_field', 'set_input', 'remove_block', 'add_after'],
-                },
-                block_type: {
-                  type: 'STRING',
-                  description: 'The type of the target block to modify.',
-                },
-                field: {
-                  type: 'STRING',
-                  description: 'For set_field: the name of the field to change (e.g., "SECONDS", "COLOR", "NUM").',
-                },
-                value: {
-                  type: 'STRING',
-                  description: 'For set_field/set_input: the new value (as string).',
-                },
-                input: {
-                  type: 'STRING',
-                  description: 'For set_input: the input name to change.',
-                },
-                occurrence: {
-                  type: 'INTEGER',
-                  description: 'Which occurrence (0-indexed) of the block type to target. Defaults to 0 (first).',
-                },
-                blocks: {
-                  type: 'ARRAY',
-                  description: 'For add_after: the DSL blocks to insert.',
-                  items: { type: 'OBJECT' },
-                },
-              },
-              required: ['action', 'block_type'],
-            },
+            type: 'STRING',
+            description: 'A JSON string encoding an array of modification operations. Each operation is an object with: action ("set_field"|"set_input"|"remove_block"|"add_after"), block_type (target block type), and action-specific fields (field/value for set_field, input/value for set_input, occurrence for targeting specific instances, blocks array for add_after). Example: [{"action":"set_field","block_type":"wait_seconds","field":"SECONDS","value":"2"}]',
           },
         },
         required: ['operations'],

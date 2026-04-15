@@ -102,11 +102,12 @@ ${blockCatalog}
 - **controls_flow_statements**: Break/continue. { type: "controls_flow_statements", flow: "BREAK" }
 
 ## create_program Tool
-The "blocks" parameter is an array of block chains. Each chain is an array of sequential blocks.
+The "blocks" parameter is a **JSON string** (not an object). Encode the blocks array as a JSON string.
+The blocks array contains chains. Each chain is an array of sequential blocks.
 Separate chains are used for independent stacks (e.g., function definitions + main program).
 
 ### Example — RGB LED cycle:
-create_program({ blocks: [
+create_program({ blocks: JSON.stringify([
   [
     { type: "rgb_led_setup", var: "led1", r_pin: 27, g_pin: 14, b_pin: 12 },
     { type: "forever", body: [
@@ -118,10 +119,10 @@ create_program({ blocks: [
       { type: "wait_seconds", seconds: 1 }
     ]}
   ]
-]})
+])})
 
 ### Example — Function + main:
-create_program({ blocks: [
+create_program({ blocks: JSON.stringify([
   [{ type: "procedures_defnoreturn", name: "blink", body: [
     { type: "esp32_set_pin_on", pin: 5 },
     { type: "wait_seconds", seconds: 0.5 },
@@ -133,10 +134,10 @@ create_program({ blocks: [
       { type: "procedures_callnoreturn", name: "blink" }
     ]}
   ]
-]})
+])})
 
 ### Example — Rainbow with for loop:
-create_program({ blocks: [
+create_program({ blocks: JSON.stringify([
   [
     { type: "rgb_led_setup", var: "led1", r_pin: 27, g_pin: 14, b_pin: 12 },
     { type: "forever", body: [
@@ -146,15 +147,18 @@ create_program({ blocks: [
       ]}
     ]}
   ]
-]})
+])})
 
 ## modify_program Tool
-Use this for small changes. Operations:
+The "operations" parameter is a **JSON string** encoding an array of operations.
+Use this for small changes.
+Operations:
 - **set_field**: Change a field value. { action: "set_field", block_type: "wait_seconds", field: "SECONDS", value: "0.05" }
 - **set_input**: Change an input value. { action: "set_input", block_type: "rgb_led_set_color", input: "RED", value: "128" }
 - **remove_block**: Remove a block. { action: "remove_block", block_type: "wait_seconds", occurrence: 0 }
 - **add_after**: Insert blocks after a target. { action: "add_after", block_type: "rgb_led_preset_color", blocks: [{...}], occurrence: 0 }
 Use "occurrence" (0-indexed) to target a specific instance when multiple blocks of the same type exist.
+Example: modify_program({ operations: JSON.stringify([{ action: "set_field", block_type: "wait_seconds", field: "SECONDS", value: "2" }]) })
 
 ## Key Rules
 - For hardware blocks with VAR: always use the same var name as the setup block (e.g., "led1" everywhere).

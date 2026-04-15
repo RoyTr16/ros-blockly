@@ -201,7 +201,18 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
       const modifyCall = toolCalls.find(tc => tc.name === 'modify_program');
 
       if (createCall) {
-        const json = compileDSL(createCall.args);
+        // blocks comes as a JSON string from the tool call — parse it
+        let blocksData;
+        try {
+          blocksData = typeof createCall.args.blocks === 'string'
+            ? JSON.parse(createCall.args.blocks)
+            : createCall.args.blocks;
+        } catch (e) {
+          setMessages(prev => [...prev, { role: 'error', text: `Failed to parse program data: ${e.message}` }]);
+          return;
+        }
+        console.log('create_program DSL:', JSON.stringify(blocksData, null, 2));
+        const json = compileDSL({ blocks: blocksData });
         const loadErr = testLoad(json);
         if (loadErr) {
           setMessages(prev => [...prev, { role: 'error', text: `Block load error: ${loadErr}` }]);
@@ -211,7 +222,17 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
           setMessages(prev => [...prev, { role: 'pending', text: 'Program ready. Preview shown in workspace.' }]);
         }
       } else if (modifyCall) {
-        const result = applyModifications(modifyCall.args.operations || []);
+        let operations;
+        try {
+          operations = typeof modifyCall.args.operations === 'string'
+            ? JSON.parse(modifyCall.args.operations)
+            : modifyCall.args.operations;
+        } catch (e) {
+          setMessages(prev => [...prev, { role: 'error', text: `Failed to parse modifications: ${e.message}` }]);
+          return;
+        }
+        console.log('modify_program ops:', JSON.stringify(operations, null, 2));
+        const result = applyModifications(operations || []);
         if (result.error) {
           setMessages(prev => [...prev, { role: 'error', text: result.error }]);
         } else {
