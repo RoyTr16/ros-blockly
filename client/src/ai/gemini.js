@@ -1,5 +1,5 @@
 // Gemini API wrapper with function calling for DSL-based block generation
-import { buildSystemPrompt } from './promptBuilder';
+import { buildSystemPrompt, getBlockDetails } from './promptBuilder';
 import { buildToolDeclarations } from './toolDefinitions';
 
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
@@ -101,15 +101,54 @@ export async function sendMessage(userMessage, currentWorkspaceCode = null, _opt
 
   let fullMessage = userMessage;
   if (currentWorkspaceCode) {
-    fullMessage += `\n\nCurrent program (generated JavaScript):\n\`\`\`javascript\n${currentWorkspaceCode}\n\`\`\``;
+    fullMessage += `\n\nCurrent program (DSL format):\n${currentWorkspaceCode}`;
   }
 
   chatHistory.push({ role: 'user', parts: [{ text: fullMessage }] });
 
   const { parts, rawContent } = await callApi(chatHistory);
-
-  // Add model response to history (include function call parts for context)
   chatHistory.push({ role: 'model', parts: rawContent.parts });
 
-  return parseResponse(parts);
+  // Handle get_block_details tool call — resolve it automatically and re-call
+  const result = parseResponse(parts);
+  const detailsCall = result.toolCalls.find(tc => tc.name === 'get_block_details');
+
+  if (detailsCall) {
+    let blockTypes;
+    try {
+      blockTypes = typeof detailsCall.args.block_types === 'string'
+        ? JSON.parse(detailsCall.args.block_types)
+        : detailsCall.args.block_types;
+    } catch {
+      blockTypes = [];
+    }
+
+    const details = getBlockDetails(blockTypes);
+    console.log('[Gemini] get_block_details for:', blockTypes);
+
+    // Send the tool response back to the model
+    chatHistory.push({
+      role: 'user',
+      parts: [{
+        functionResponse: {
+          name: 'get_block_details',
+          response: { result: details || 'No matching blocks found.' },
+        },
+      }],
+    });
+
+    const { parts: parts2, rawContent: raw2 } = await callApi(chatHistory);
+    chatHistory.push({ role: 'model', parts: raw2.parts });
+
+    const result2 = parseResponse(parts2);
+    // Merge text from both phases
+    result2.text = (result.text + '\n\n' + result2.text).trim();
+    // Filter out get_block_details from final tool calls
+    result2.toolCalls = result2.toolCalls.filter(tc => tc.name !== 'get_block_details');
+    return result2;
+  }
+
+  // Filter out get_block_details from final result (shouldn't happen, but safety)
+  result.toolCalls = result.toolCalls.filter(tc => tc.name !== 'get_block_details');
+  return result;
 }

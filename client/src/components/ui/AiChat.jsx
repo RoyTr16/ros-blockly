@@ -3,6 +3,7 @@ import * as Blockly from 'blockly/core';
 import * as geminiBackend from '../../ai/gemini';
 import * as ollamaBackend from '../../ai/ollama';
 import { compileDSL } from '../../ai/dslCompiler';
+import { decompileDSL } from '../../ai/dslDecompiler';
 import './AiChat.css';
 
 const API_KEY_STORAGE = 'gemini_api_key';
@@ -12,9 +13,21 @@ const OLLAMA_MODEL_STORAGE = 'ollama_model';
 
 const ENV_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
 const DEFAULT_OLLAMA_URL = 'http://localhost:11434';
-const DEFAULT_OLLAMA_MODEL = import.meta.env.VITE_OLLAMA_MODEL || 'llama3.1';
+const DEFAULT_OLLAMA_MODEL = import.meta.env.VITE_OLLAMA_MODEL || 'qwen2.5-coder:7b';
 
 const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
+
+  // Decompile the current workspace back to DSL format for AI context
+  const getWorkspaceDSL = () => {
+    const ws = blocklyRef?.current?.getWorkspace?.();
+    if (!ws) return null;
+    try {
+      const json = Blockly.serialization.workspaces.save(ws);
+      if (!json?.blocks?.blocks?.length) return null;
+      const dsl = decompileDSL(json);
+      return dsl.length > 0 ? JSON.stringify(dsl, null, 2) : null;
+    } catch { return null; }
+  };
   const [backend, setBackend] = useState(() => localStorage.getItem(BACKEND_STORAGE) || 'gemini');
   const [apiKey, setApiKey] = useState(() => localStorage.getItem(API_KEY_STORAGE) || ENV_KEY);
   const [ollamaUrl, setOllamaUrl] = useState(() => localStorage.getItem(OLLAMA_URL_STORAGE) || DEFAULT_OLLAMA_URL);
@@ -223,41 +236,11 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
     setPendingJson(null);
 
     try {
-      const currentCode = generatedCode?.trim() || null;
+      const dslContext = getWorkspaceDSL();
+      const { text: responseText, toolCalls } = await currentBackend().sendMessage(text, dslContext);
 
-      // For Ollama, use streaming to show partial text
-      let streamMsgIndex = null;
-      const streamOpts = {};
-      if (backend === 'ollama') {
-        streamOpts.onToken = (token) => {
-          setMessages(prev => {
-            if (streamMsgIndex === null) {
-              streamMsgIndex = prev.length;
-              return [...prev, { role: 'assistant', text: token, streaming: true }];
-            }
-            const updated = [...prev];
-            updated[streamMsgIndex] = { ...updated[streamMsgIndex], text: updated[streamMsgIndex].text + token };
-            return updated;
-          });
-        };
-      }
-
-      const { text: responseText, toolCalls } = await currentBackend().sendMessage(text, currentCode, streamOpts);
-
-      // Replace streaming message with final parsed text (strips JSON blocks)
-      if (streamMsgIndex !== null) {
-        setMessages(prev => {
-          const updated = [...prev];
-          if (responseText) {
-            updated[streamMsgIndex] = { role: 'assistant', text: responseText };
-          } else {
-            // Remove the streaming placeholder if final text is empty (all was JSON)
-            updated.splice(streamMsgIndex, 1);
-          }
-          return updated;
-        });
-      } else if (responseText) {
-        // Non-streaming (Gemini): show text response
+      // Show text response if any
+      if (responseText) {
         setMessages(prev => [...prev, { role: 'assistant', text: responseText }]);
       }
 

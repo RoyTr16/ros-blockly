@@ -45,7 +45,7 @@ services:
       - "${CLIENT_PORT}:5173"
     environment:
       - VITE_GEMINI_API_KEY=${VITE_GEMINI_API_KEY}
-      - VITE_OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.1}
+      - VITE_OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5-coder:7b}
     volumes:
       - ./client:/app
       - /app/node_modules
@@ -73,6 +73,8 @@ services:
     image: ollama/ollama
     ports:
       - "${OLLAMA_PORT:-11434}:11434"
+    environment:
+      - OLLAMA_ORIGINS=*
     volumes:
       - ollama_data:/root/.ollama
     deploy:

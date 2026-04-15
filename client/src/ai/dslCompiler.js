@@ -53,7 +53,7 @@ function compileBlock(dsl, variables, blockDefs) {
   const block = { type: blockType, id: uid() };
 
   // Determine which keys are fields, inputs, and special
-  const specialKeys = new Set(['type', 'var', 'body', 'do', 'else_if', 'else', 'condition', 'value', 'steps', 'function_name', 'args']);
+  const specialKeys = new Set(['type', 'var', 'body', 'do', 'then', 'else_if', 'else', 'condition', 'if', 'value', 'num', 'steps', 'function_name', 'args']);
   const def = blockDefs[blockType];
 
   // --- Handle built-in blocks specially ---
@@ -121,18 +121,24 @@ function compileBlock(dsl, variables, blockDefs) {
       BOOL: { block: { type: 'logic_boolean', id: uid(), fields: { BOOL: 'TRUE' } } },
     };
     if (dsl.body) {
-      block.inputs.DO = { block: compileChain(dsl.body, variables, blockDefs) };
+      const bodyChain = compileChain(dsl.body, variables, blockDefs);
+      if (bodyChain) {
+        block.inputs.DO = { block: bodyChain };
+      } else {
+        console.warn('[DSL Compiler] forever body compiled to null. DSL body:', JSON.stringify(dsl.body));
+      }
     }
     return block;
   }
 
   // controls_if: { type, if0, do0, if1?, do1?, else? }
+  // Aliases: condition/then/else, if/do/else
   if (blockType === 'controls_if') {
     block.inputs = {};
     let elseIfCount = 0;
     for (let i = 0; i < 20; i++) {
-      const cond = dsl[`if${i}`] || (i === 0 ? dsl.condition : null);
-      const body = dsl[`do${i}`] || (i === 0 ? dsl.body : null);
+      const cond = dsl[`if${i}`] || (i === 0 ? (dsl.condition || dsl.if) : null);
+      const body = dsl[`do${i}`] || (i === 0 ? (dsl.then || dsl.body) : null);
       if (!cond && i > 0) break;
       if (cond) block.inputs[`IF${i}`] = { block: compileBlock(cond, variables, blockDefs) };
       if (body) block.inputs[`DO${i}`] = { block: compileChain(body, variables, blockDefs) };
@@ -179,9 +185,9 @@ function compileBlock(dsl, variables, blockDefs) {
     return block;
   }
 
-  // math_number: { type, value }
+  // math_number: { type, value } — also accepts 'num' alias
   if (blockType === 'math_number') {
-    block.fields = { NUM: dsl.value ?? 0 };
+    block.fields = { NUM: dsl.value ?? dsl.num ?? 0 };
     return block;
   }
 
@@ -385,11 +391,22 @@ function compileExpression(expr, variables, blockDefs) {
 }
 
 // Compile an array of DSL blocks into a chain (linked via next)
+// Block types that are expression-only (have output connection but no previous/next)
+const EXPRESSION_BLOCKS = new Set([
+  'math_number', 'math_arithmetic', 'math_modulo', 'math_single', 'math_constrain',
+  'logic_compare', 'logic_operation', 'logic_negate', 'logic_boolean',
+  'variables_get', 'utilities_elapsed_time',
+]);
+
 function compileChain(blocks, variables, blockDefs) {
   if (!Array.isArray(blocks)) blocks = [blocks];
   if (blocks.length === 0) return null;
 
-  const compiled = blocks.map(b => compileBlock(b, variables, blockDefs));
+  // Filter out expression-only blocks that can't be chained as statements
+  const stmtBlocks = blocks.filter(b => !EXPRESSION_BLOCKS.has(b.type));
+  if (stmtBlocks.length === 0) return null;
+
+  const compiled = stmtBlocks.map(b => compileBlock(b, variables, blockDefs));
 
   // Link via next
   for (let i = 0; i < compiled.length - 1; i++) {

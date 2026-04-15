@@ -2,28 +2,36 @@
 // These are sent to the model so it can call our tools instead of generating raw JSON.
 
 import { getLoadedPackages } from '../packages/PackageLoader';
+import { getAllBlockTypes } from './promptBuilder';
 
 // Build the tool declarations dynamically based on loaded packages
 export function buildToolDeclarations() {
-  const blockTypes = [];
-  const packages = getLoadedPackages();
-
-  for (const entry of Object.values(packages)) {
-    for (const block of entry.pkg.blocks) {
-      blockTypes.push(block.type);
-    }
-  }
+  const allTypes = getAllBlockTypes();
 
   return [
     {
+      name: 'get_block_details',
+      description: 'Get the exact DSL syntax for specific block types before creating a program. Call this first to learn the fields and inputs for blocks you plan to use.',
+      parameters: {
+        type: 'OBJECT',
+        properties: {
+          block_types: {
+            type: 'STRING',
+            description: `A JSON array of block type names to get syntax for. Available types: ${allTypes.join(', ')}. Example: '["esp32_set_pin_on", "esp32_setup_ultrasonic"]'`,
+          },
+        },
+        required: ['block_types'],
+      },
+    },
+    {
       name: 'create_program',
-      description: `Create a new Blockly program from scratch. The program is described as an array of block chains. Each chain is an array of blocks executed sequentially. Available custom block types: ${blockTypes.join(', ')}. Also available: standard Blockly blocks (controls_repeat_ext, controls_for, controls_whileUntil, controls_if, forever, variables_set, variables_get, logic_compare, logic_operation, math_arithmetic, math_number, logic_boolean, math_modulo, wait_seconds, utilities_print, utilities_elapsed_time, procedures_defnoreturn, procedures_defreturn, procedures_callnoreturn, procedures_callreturn, controls_flow_statements).`,
+      description: 'Create a new Blockly program from scratch. The program is described as an array of block chains. Call get_block_details first if you need DSL syntax for hardware blocks.',
       parameters: {
         type: 'OBJECT',
         properties: {
           blocks: {
             type: 'STRING',
-            description: 'A JSON string encoding the blocks array. Must be valid JSON. The top level is an array of chains. Each chain is an array of block objects executed sequentially. Example: [[{"type":"wait_seconds","seconds":1}]]. See the system instructions for the full block reference.',
+            description: 'A JSON string encoding the blocks array. Top level is an array of chains. Each chain is an array of block objects. See system instructions for format.',
           },
         },
         required: ['blocks'],
@@ -31,13 +39,13 @@ export function buildToolDeclarations() {
     },
     {
       name: 'modify_program',
-      description: 'Apply targeted modifications to the current program without regenerating the entire workspace. Use this for small changes like adjusting values, adding/removing blocks, etc.',
+      description: 'Apply targeted modifications to the current program without regenerating the entire workspace. Use this for small changes.',
       parameters: {
         type: 'OBJECT',
         properties: {
           operations: {
             type: 'STRING',
-            description: 'A JSON string encoding an array of modification operations. Each operation is an object with: action ("set_field"|"set_input"|"remove_block"|"add_after"), block_type (target block type), and action-specific fields (field/value for set_field, input/value for set_input, occurrence for targeting specific instances, blocks array for add_after). Example: [{"action":"set_field","block_type":"wait_seconds","field":"SECONDS","value":"2"}]',
+            description: 'A JSON string encoding an array of modification operations. Each operation has: action ("set_field"|"set_input"|"remove_block"|"add_after"), block_type, and action-specific fields.',
           },
         },
         required: ['operations'],

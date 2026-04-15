@@ -4,6 +4,14 @@
   "version": "1.0.0",
   "description": "Digital I/O and sensors for ESP32 via micro-ROS",
 
+  "ai": {
+    "subcategory_hints": {
+      "Digital Output": "Use esp32_set_pin_on/off for blinking LEDs or controlling single GPIO pins. Do NOT use RGB LED blocks for simple on/off pin control.",
+      "Sensors": "Ultrasonic distance sensor (HC-SR04). Returns distance in cm via a variable.",
+      "RGB LED": "For controlling 3-pin RGB LEDs with color mixing. Only use these if the user specifically asks for colors or an RGB LED."
+    }
+  },
+
   "blocks": [
     {
       "type": "esp32_gpio_pin",
@@ -35,6 +43,7 @@
     },
     {
       "type": "esp32_set_pin_on",
+      "ai_description": "Turn a single GPIO pin HIGH (3.3V). Use for blinking LEDs, activating relays, or any digital output.",
       "definition": {
         "message0": "Set Pin %1 ON",
         "args0": [
@@ -56,6 +65,7 @@
     },
     {
       "type": "esp32_set_pin_off",
+      "ai_description": "Turn a single GPIO pin LOW (0V). Use together with esp32_set_pin_on to blink LEDs.",
       "definition": {
         "message0": "Set Pin %1 OFF",
         "args0": [
@@ -77,6 +87,7 @@
     },
     {
       "type": "esp32_setup_ultrasonic",
+      "ai_description": "Setup HC-SR04 ultrasonic sensor. Distance readings in cm are continuously stored in the chosen variable.",
       "definition": {
         "message0": "Setup Ultrasonic Sensor → %1",
         "args0": [
@@ -106,6 +117,7 @@
     },
     {
       "type": "rgb_led_setup",
+      "ai_description": "Setup a 3-pin RGB LED. Only use when the user wants color control with separate R/G/B channels.",
       "definition": {
         "message0": "Setup RGB LED → %1",
         "args0": [
