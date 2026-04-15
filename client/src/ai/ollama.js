@@ -1,13 +1,14 @@
-// Ollama backend — native tool calling pipeline:
-// Model calls get_block_details to learn DSL syntax, then create_program/modify_program to generate
+// Ollama backend — native tool calling via /api/chat
+// Flow: model calls get_block_details → then create_program or modify_program
 
-import { buildSystemPrompt, getBlockDetails, getAllBlockTypes } from './promptBuilder';
+import { buildSystemPrompt, getBlockDetails, getAllBlockTypes, getCategoryBlocks } from './promptBuilder';
 
 const DEFAULT_MODEL = import.meta.env.VITE_OLLAMA_MODEL || 'qwen3:8b';
 
 let ollamaUrl = null;
 let model = DEFAULT_MODEL;
-let chatHistory = []; // { role: 'user'|'assistant'|'tool', content: string, tool_calls?: [...] }
+let chatHistory = [];
+let lastContextUsage = null; // Track token usage from last API call
 
 export function initOllama(url, modelName) {
   ollamaUrl = url.replace(/\/$/, '');
@@ -21,10 +22,17 @@ export function isInitialized() {
 
 export function resetChat() {
   chatHistory = [];
+  lastContextUsage = null;
 }
 
 export function getModel() {
   return model;
+}
+
+export function getContextUsage() {
+  if (!lastContextUsage) return null;
+  const numCtx = 8192;
+  return { ...lastContextUsage, numCtx, percent: Math.round((lastContextUsage.total / numCtx) * 100) };
 }
 
 export function setModel(m) {
@@ -32,7 +40,6 @@ export function setModel(m) {
   chatHistory = [];
 }
 
-// Fetch available models from the Ollama instance
 export async function listModels() {
   if (!ollamaUrl) return [];
   try {
@@ -45,22 +52,39 @@ export async function listModels() {
   }
 }
 
-// Build Ollama-format tool declarations
-function buildOllamaTools() {
-  const allTypes = getAllBlockTypes();
+// ── Tool declarations with proper JSON schemas ──
+
+function buildTools() {
   return [
     {
       type: 'function',
       function: {
+        name: 'get_category_blocks',
+        description: 'List available blocks in a category. Call this to discover what blocks exist.',
+        parameters: {
+          type: 'object',
+          properties: {
+            category: {
+              type: 'string',
+              description: 'Category name (e.g., "UR5 Robot Arm", "Loops", "Utilities").',
+            },
+          },
+          required: ['category'],
+        },
+      },
+    },
+    {
+      type: 'function',
+      function: {
         name: 'get_block_details',
-        description: 'Get the exact DSL syntax for specific block types before creating a program. Call this first to learn the fields and inputs for blocks you plan to use.',
+        description: 'Get the exact DSL syntax for specific block types. Call after get_category_blocks.',
         parameters: {
           type: 'object',
           properties: {
             block_types: {
               type: 'array',
-              items: { type: 'string', enum: allTypes },
-              description: 'Array of block type names to get details for.',
+              items: { type: 'string' },
+              description: 'Block type names to look up.',
             },
           },
           required: ['block_types'],
@@ -71,80 +95,51 @@ function buildOllamaTools() {
       type: 'function',
       function: {
         name: 'create_program',
-        description: 'Create a new Blockly program from a blocks array.',
+        description: 'Create a Blockly program from a sequence of blocks. Example: [{type:"wait_seconds",seconds:1},{type:"ur5_move_single_joint",joint_topic:"/shoulder_pan",position:0.5}]',
         parameters: {
           type: 'object',
           properties: {
             blocks: {
               type: 'array',
-              description: 'Array of block chains. Each chain is an array of block objects. Each block has a "type" string and additional fields.',
-              items: {
-                type: 'array',
-                items: { type: 'object' },
-              },
+              description: 'Array of block objects to place sequentially.',
+              items: { type: 'object' },
             },
           },
           required: ['blocks'],
         },
       },
     },
-    {
-      type: 'function',
-      function: {
-        name: 'modify_program',
-        description: 'Apply targeted modifications to the current program.',
-        parameters: {
-          type: 'object',
-          properties: {
-            operations: {
-              type: 'array',
-              description: 'Array of modification operations.',
-              items: {
-                type: 'object',
-                properties: {
-                  action: {
-                    type: 'string',
-                    enum: ['set_field', 'set_input', 'remove_block', 'add_after', 'insert'],
-                    description: 'The modification action to perform.',
-                  },
-                  block_type: { type: 'string', description: 'Target block type (for set_field, set_input, remove_block, add_after).' },
-                  occurrence: { type: 'integer', description: 'Which occurrence of block_type to target (0-indexed, default 0).' },
-                  field: { type: 'string', description: 'Field name (for set_field).' },
-                  input: { type: 'string', description: 'Input name (for set_input).' },
-                  value: { type: 'string', description: 'New value (for set_field, set_input).' },
-                  block: { type: 'object', description: 'Block DSL object to insert.' },
-                  blocks: { type: 'array', items: { type: 'object' }, description: 'Array of block DSL objects (for add_after).' },
-                },
-                required: ['action'],
-              },
-            },
-          },
-          required: ['operations'],
-        },
-      },
-    },
   ];
 }
 
-// Core API call to Ollama with optional tools
-async function callOllama(messages, { tools = null, think = false } = {}) {
+// ── Core Ollama API call ──
+
+async function callOllama(messages, tools = null) {
   const body = {
     model,
     stream: false,
     messages,
-    options: {
-      temperature: 0.2,
-      num_predict: 8192,
-    },
+    options: { temperature: 0.1, num_predict: 4096, num_ctx: 8192, top_p: 0.9, repeat_penalty: 1.1 },
   };
   if (tools) body.tools = tools;
-  if (think) body.think = true;
 
-  const res = await fetch(`${ollamaUrl}/api/chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 120_000);
+
+  let res;
+  try {
+    res = await fetch(`${ollamaUrl}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (e) {
+    clearTimeout(timeout);
+    if (e.name === 'AbortError') throw new Error('Ollama request timed out (120s).');
+    throw e;
+  }
+  clearTimeout(timeout);
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -152,202 +147,216 @@ async function callOllama(messages, { tools = null, think = false } = {}) {
   }
 
   const data = await res.json();
+  // Track token usage for context display
+  if (data.prompt_eval_count || data.eval_count) {
+    const promptTokens = data.prompt_eval_count || 0;
+    const completionTokens = data.eval_count || 0;
+    lastContextUsage = { promptTokens, completionTokens, total: promptTokens + completionTokens };
+  }
   return data.message || { role: 'assistant', content: '' };
 }
 
-// Execute a tool call locally and return the result
+// ── Local tool execution ──
+
 function executeToolCall(name, args) {
-  if (name === 'get_block_details') {
-    try {
-      const blockTypes = Array.isArray(args.block_types)
-        ? args.block_types
-        : typeof args.block_types === 'string'
-          ? JSON.parse(args.block_types)
-          : [args.block_types];
-      const details = getBlockDetails(Array.isArray(blockTypes) ? blockTypes : [blockTypes]);
-      return details || 'No details found for the requested block types.';
-    } catch (e) {
-      return `Error parsing block_types: ${e.message}`;
-    }
+  if (name === 'get_category_blocks') {
+    const category = args.category || '';
+    return getCategoryBlocks(category);
   }
-  // create_program and modify_program are handled by the caller
+  if (name === 'get_block_details') {
+    const blockTypes = Array.isArray(args.block_types)
+      ? args.block_types
+      : typeof args.block_types === 'string'
+        ? JSON.parse(args.block_types)
+        : [args.block_types];
+    return getBlockDetails(blockTypes) || 'No details found.';
+  }
   return null;
 }
 
-// Normalize modify_program operations from the many formats the model might produce
-// Expected: [{action: "insert", block: {...}}, ...]
-// Model might send:
-//   1. Array of ops (correct): [{action: "insert", ...}]
-//   2. Double-wrapped: {operations: [...]} → extract .operations
-//   3. Single op object: {action: "insert", block: {...}} → wrap in array
-//   4. Action-as-key: {insert: {block: {...}}} → [{action: "insert", block: {...}}]
-//   5. Action-as-key with nested value: {set_field: {block_type: "...", field: "...", value: "..."}}
+// ── Normalize modify_program operations ──
+
 function normalizeOperations(raw) {
   if (!raw || typeof raw !== 'object') return [];
-  // Already an array
   if (Array.isArray(raw)) return raw;
-  // Double-wrapped: { operations: [...] }
   if (Array.isArray(raw.operations)) return raw.operations;
-  // Single op with action field: { action: "insert", ... }
   if (raw.action) return [raw];
-  // Action-as-key: { insert: { block: {...} } } or { set_field: { block_type: "...", ... } }
-  const KNOWN_ACTIONS = ['set_field', 'set_input', 'remove_block', 'add_after', 'insert', 'add_block'];
+  const KNOWN = ['set_field', 'set_input', 'remove_block', 'add_after', 'insert'];
   const ops = [];
-  for (const key of KNOWN_ACTIONS) {
-    if (raw[key]) {
-      const val = typeof raw[key] === 'object' ? raw[key] : {};
-      ops.push({ action: key, ...val });
-    }
+  for (const key of KNOWN) {
+    if (raw[key]) ops.push({ action: key, ...(typeof raw[key] === 'object' ? raw[key] : {}) });
   }
-  if (ops.length > 0) return ops;
-  // Give up
-  console.warn('[Ollama] Could not normalize operations:', JSON.stringify(raw));
-  return [];
+  return ops;
 }
 
-// Send a message and return { text, toolCalls } (same interface as gemini.js)
+// ── Main entry point ──
+
 export async function sendMessage(userMessage, currentWorkspaceCode = null, _opts = {}) {
   if (!ollamaUrl) throw new Error('Ollama not initialized. Set the Ollama URL.');
 
   let fullMessage = userMessage;
   if (currentWorkspaceCode) {
-    fullMessage += `\n\nCurrent program (DSL format — same format you should output):\n\`\`\`json\n${currentWorkspaceCode}\n\`\`\``;
+    fullMessage += `\n\nCurrent program:\n\`\`\`json\n${currentWorkspaceCode}\n\`\`\``;
   }
 
   chatHistory.push({ role: 'user', content: fullMessage });
 
   const systemPrompt = buildSystemPrompt('ollama');
-  const tools = buildOllamaTools();
+  const tools = buildTools();
+  const buildMessages = () => [{ role: 'system', content: systemPrompt }, ...chatHistory];
 
-  const buildMessages = () => [
-    { role: 'system', content: systemPrompt },
-    ...chatHistory,
-  ];
+  console.log('[Ollama] Model:', model, '| System prompt:', systemPrompt.length, 'chars | Tools:', tools.length);
 
   let response;
   try {
-    response = await callOllama(buildMessages(), { tools });
+    response = await callOllama(buildMessages(), tools);
   } catch (e) {
     chatHistory.pop();
-    if (e.message.includes('API error')) throw e;
-    throw new Error(`Cannot reach Ollama at ${ollamaUrl}. Make sure the Ollama container is running and CORS is enabled (OLLAMA_ORIGINS=*).`);
+    if (e.message.includes('API error') || e.message.includes('timed out')) throw e;
+    throw new Error(`Cannot reach Ollama at ${ollamaUrl}. Make sure Ollama is running with OLLAMA_ORIGINS=*.`);
   }
 
-  // Tool calling loop: handle get_block_details calls, then let model continue
-  const MAX_ROUNDS = 3;
+  // Agentic tool loop — model keeps calling tools until it's done.
+  // Safety limit prevents infinite loops, but is set high enough to never be the bottleneck.
+  const MAX_ROUNDS = 20;
   let rounds = 0;
   let explanation = response.content || '';
-  const programToolCalls = [];
+  const programCalls = [];
 
-  while (response.tool_calls && response.tool_calls.length > 0 && rounds < MAX_ROUNDS) {
+  console.log('[Ollama] Round 0:', {
+    content: response.content?.length || 0,
+    toolCalls: response.tool_calls?.length || 0,
+    tools: response.tool_calls?.map(tc => tc.function?.name) || [],
+  });
+
+  let nudged = false;
+
+  while (rounds < MAX_ROUNDS) {
+    // No tool calls — check if we should nudge or stop
+    if (!response.tool_calls?.length) {
+      // If discovery happened but no program was created yet, nudge once
+      if (!nudged && rounds > 0 && programCalls.length === 0) {
+        nudged = true;
+        console.log(`[Ollama] Round ${rounds}: no create_program after discovery, nudging...`);
+        // Keep any text the model wrote as explanation
+        if (response.content) {
+          explanation = (explanation + '\n\n' + response.content).trim();
+          chatHistory.push({ role: 'assistant', content: response.content });
+        }
+        chatHistory.push({
+          role: 'user',
+          content: 'Call the create_program tool now. Pass blocks as an array of objects, e.g. blocks: [{type:"wait_seconds",seconds:1}]',
+        });
+        try {
+          response = await callOllama(buildMessages(), tools);
+          rounds++;
+          console.log(`[Ollama] Round ${rounds} (nudge):`, {
+            content: response.content?.length || 0,
+            toolCalls: response.tool_calls?.length || 0,
+            tools: response.tool_calls?.map(tc => tc.function?.name) || [],
+          });
+          continue;
+        } catch { break; }
+      }
+      // Model gave a text response or we already have program calls — done
+      break;
+    }
+
     rounds++;
 
-    // Add assistant message with tool calls to history
+    // Sanitize tool_calls: ensure arguments are objects, not strings
+    const sanitizedToolCalls = response.tool_calls.map(tc => ({
+      function: {
+        name: tc.function.name,
+        arguments: typeof tc.function.arguments === 'string'
+          ? JSON.parse(tc.function.arguments)
+          : tc.function.arguments,
+      },
+    }));
+
     chatHistory.push({
       role: 'assistant',
       content: response.content || '',
-      tool_calls: response.tool_calls,
+      tool_calls: sanitizedToolCalls,
     });
 
-    let hasGetDetails = false;
     for (const tc of response.tool_calls) {
       const fn = tc.function;
-      if (fn.name === 'get_block_details') {
-        hasGetDetails = true;
+
+      if (fn.name === 'get_category_blocks' || fn.name === 'get_block_details') {
         const result = executeToolCall(fn.name, fn.arguments);
-        chatHistory.push({
-          role: 'tool',
-          content: result,
-        });
+        chatHistory.push({ role: 'tool', content: result });
       } else if (fn.name === 'create_program' || fn.name === 'modify_program') {
-        console.log(`[Ollama] Tool call: ${fn.name}`, JSON.stringify(fn.arguments).slice(0, 500));
-        programToolCalls.push({ name: fn.name, args: fn.arguments });
+        console.log(`[Ollama] Tool: ${fn.name}`, JSON.stringify(fn.arguments).slice(0, 500));
+        programCalls.push({ name: fn.name, args: fn.arguments });
       }
     }
 
-    // If there were only program tool calls (no get_block_details), we're done
-    if (!hasGetDetails) break;
+    // Got a program — stop the loop, no need to call Ollama again
+    if (programCalls.length > 0) break;
 
-    // Continue the conversation — model should now generate the program
     try {
-      response = await callOllama(buildMessages(), { tools });
+      response = await callOllama(buildMessages(), tools);
     } catch {
       break;
     }
 
-    // Accumulate explanation text
+    console.log(`[Ollama] Round ${rounds}:`, {
+      content: response.content?.length || 0,
+      toolCalls: response.tool_calls?.length || 0,
+      tools: response.tool_calls?.map(tc => tc.function?.name) || [],
+    });
+
     if (response.content) {
       explanation = (explanation + '\n\n' + response.content).trim();
     }
   }
 
-  // If no tool calls found in the loop, check the final response for program calls
-  if (programToolCalls.length === 0 && response.tool_calls) {
-    for (const tc of response.tool_calls) {
-      const fn = tc.function;
-      if (fn.name === 'create_program' || fn.name === 'modify_program') {
-        console.log(`[Ollama] Final tool call: ${fn.name}`, JSON.stringify(fn.arguments).slice(0, 500));
-        programToolCalls.push({ name: fn.name, args: fn.arguments });
-      }
-    }
+  if (rounds >= MAX_ROUNDS) {
+    console.warn('[Ollama] Hit safety limit of', MAX_ROUNDS, 'rounds');
   }
 
-  // Add final assistant message to history
-  if (!response.tool_calls || response.tool_calls.length === 0) {
-    chatHistory.push({ role: 'assistant', content: response.content || '' });
-    if (response.content) {
+  // Record final assistant message
+  if (!response.tool_calls?.length && response.content) {
+    chatHistory.push({ role: 'assistant', content: response.content });
+    // Only add if not already captured (avoid duplicates for single-round text responses)
+    if (!explanation.includes(response.content)) {
       explanation = (explanation ? explanation + '\n\n' + response.content : response.content).trim();
     }
   }
 
-  // Parse program tool calls into our standard format
+  // Parse tool calls into standard format
   const toolCalls = [];
-  for (const ptc of programToolCalls) {
+  for (const pc of programCalls) {
     try {
-      if (ptc.name === 'create_program') {
-        let blocks = ptc.args.blocks;
-        // If model still sends a string despite schema, parse it
+      if (pc.name === 'create_program') {
+        let blocks = pc.args.blocks;
         if (typeof blocks === 'string') blocks = JSON.parse(blocks);
-        // Unwrap double-wrapped: { blocks: [...] } → [...]
-        if (blocks && !Array.isArray(blocks) && Array.isArray(blocks.blocks)) {
-          blocks = blocks.blocks;
+        if (blocks && !Array.isArray(blocks) && Array.isArray(blocks.blocks)) blocks = blocks.blocks;
+        // Single chain → wrap
+        if (Array.isArray(blocks) && blocks.length > 0 && !Array.isArray(blocks[0]) && blocks[0]?.type) {
+          blocks = [blocks];
         }
         if (Array.isArray(blocks)) {
           toolCalls.push({ name: 'create_program', args: { blocks } });
         }
-      } else if (ptc.name === 'modify_program') {
-        let operations = ptc.args.operations;
-        // If model still sends a string despite schema, parse it
+      } else if (pc.name === 'modify_program') {
+        let operations = pc.args.operations;
         if (typeof operations === 'string') operations = JSON.parse(operations);
-        // Normalize from the many formats the model might produce
         operations = normalizeOperations(operations);
-        if (Array.isArray(operations) && operations.length > 0) {
+        if (operations.length > 0) {
           toolCalls.push({ name: 'modify_program', args: { operations } });
         }
       }
     } catch (e) {
-      console.warn('[Ollama] Failed to parse tool call args:', e.message);
+      console.warn('[Ollama] Failed to parse tool args:', e.message);
     }
   }
 
-  // Also try to extract DSL from text content as fallback (model may output JSON in text)
-  if (toolCalls.length === 0 && explanation) {
-    const match = explanation.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
-    if (match) {
-      try {
-        const parsed = JSON.parse(match[1].trim());
-        if (Array.isArray(parsed) && parsed.length > 0 && parsed.every(c => Array.isArray(c) && c[0]?.type)) {
-          toolCalls.push({ name: 'create_program', args: { blocks: parsed } });
-        }
-      } catch { /* ignore */ }
-    }
-  }
-
-  // Clean up explanation: remove JSON code blocks
   const cleanExplanation = explanation
     .replace(/```(?:json)?\s*\n?[\s\S]*?```/g, '')
     .replace(/<think>[\s\S]*?<\/think>/g, '')
     .trim();
 
-  return { text: cleanExplanation, toolCalls };
+  return { text: cleanExplanation, toolCalls, contextUsage: getContextUsage() };
 }

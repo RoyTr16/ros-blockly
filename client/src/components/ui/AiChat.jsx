@@ -55,6 +55,7 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
   const [loading, setLoading] = useState(false);
   const [pendingJson, setPendingJson] = useState(null);
   const [previewActive, setPreviewActive] = useState(false);
+  const [ctxUsage, setCtxUsage] = useState(null);
   const savedStateRef = useRef(null);
   const messagesEndRef = useRef(null);
 
@@ -107,12 +108,14 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
   const handleClear = () => {
     currentBackend().resetChat();
     setMessages([{ role: 'assistant', text: 'Chat cleared. Describe what you want to build.' }]);
+    setCtxUsage(null);
   };
 
   const handleChangeKey = () => {
     currentBackend().resetChat();
     setMessages([]);
     setKeySet(false);
+    setCtxUsage(null);
   };
 
   // Try to load JSON into workspace to test validity, then restore previous state
@@ -150,16 +153,43 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
     // Block types that have no previous/next connections — must be placed as standalone top-level
     const STANDALONE_TYPES = new Set(['utilities_graph_viewer']);
 
+    // Track removed blocks so they can be re-inserted without the model providing the full definition
+    const removedBlocks = {};
+
     for (const op of operations) {
       // --- "insert" action: add a block (or standalone block) at chain/position ---
       if (op.action === 'insert' || op.action === 'add_block') {
-        const blockDsl = op.block || op.blocks?.[0];
+        let blockDsl = op.block || op.blocks?.[0];
+        // If no block definition provided, try to reuse a previously removed block of same type
+        if (!blockDsl && op.block_type && removedBlocks[op.block_type]) {
+          blockDsl = removedBlocks[op.block_type];
+        }
         if (!blockDsl) return { error: 'insert operation missing "block" field.' };
-        const compiled = compileSingleBlock(blockDsl);
+        // If blockDsl came from removedBlocks, it has a pre-compiled Blockly JSON
+        const compiled = blockDsl._compiled
+          ? JSON.parse(JSON.stringify(blockDsl._compiled))
+          : compileSingleBlock(blockDsl);
         if (!compiled) return { error: `Failed to compile block: ${JSON.stringify(blockDsl)}` };
 
-        const isStandalone = STANDALONE_TYPES.has(blockDsl.type);
-        const chainIdx = op.chain ?? -1;
+        const blockType = blockDsl._compiled ? blockDsl._compiled.type : blockDsl.type;
+        const isStandalone = STANDALONE_TYPES.has(blockType);
+        let chainIdx = op.chain ?? -1;
+
+        // If model specified a block_type target instead of chain index, find which chain contains it
+        if (chainIdx < 0 && op.block_type) {
+          for (let ci = 0; ci < modified.blocks.blocks.length; ci++) {
+            let b = modified.blocks.blocks[ci];
+            while (b) {
+              if (b.type === op.block_type) { chainIdx = ci; break; }
+              b = b.next?.block;
+            }
+            if (chainIdx >= 0) break;
+          }
+        }
+        // Default to first chain if still not found
+        if (chainIdx < 0 && !isStandalone && modified.blocks.blocks.length > 0) {
+          chainIdx = 0;
+        }
 
         if (isStandalone || chainIdx < 0 || chainIdx >= modified.blocks.blocks.length) {
           // Add as new top-level block (standalone or invalid chain)
@@ -211,6 +241,11 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
               block.inputs[op.input] = { block: { type: 'math_number', id: 'm' + Date.now(), fields: { NUM: Number(op.value) } } };
               found = true;
             } else if (op.action === 'remove_block') {
+              // Save a clean copy before removing (for potential re-insert)
+              const saved = JSON.parse(JSON.stringify(block));
+              delete saved.next; // don't keep the chain tail
+              delete saved._remove;
+              removedBlocks[block.type] = { _compiled: saved };
               block._remove = true;
               found = true;
             } else if (op.action === 'add_after') {
@@ -315,11 +350,24 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
 
     try {
       const dslContext = getWorkspaceDSL();
-      const { text: responseText, toolCalls } = await currentBackend().sendMessage(text, dslContext);
+      const { text: responseText, toolCalls, contextUsage } = await currentBackend().sendMessage(text, dslContext);
+
+      // Update context usage display
+      if (contextUsage) {
+        setCtxUsage(contextUsage);
+      }
 
       // Show text response if any
-      if (responseText) {
-        setMessages(prev => [...prev, { role: 'assistant', text: responseText }]);
+      // Strip JSON code blocks and raw JSON objects from the explanation when tool calls are present
+      let displayText = responseText || '';
+      if (toolCalls.length > 0 && displayText) {
+        // Remove ```json...``` code blocks
+        displayText = displayText.replace(/```(?:json)?\s*\n?[\s\S]*?```/g, '').trim();
+        // Remove bare JSON objects/arrays that the model may have dumped as text
+        displayText = displayText.replace(/\n\{[\s\S]*\}\s*$/g, '').trim();
+      }
+      if (displayText) {
+        setMessages(prev => [...prev, { role: 'assistant', text: displayText }]);
       }
 
       // Process tool calls
@@ -376,7 +424,7 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
             setMessages(prev => [...prev, { role: 'pending', text: 'Modifications ready. Preview shown in workspace.' }]);
           }
         }
-      } else if (!responseText) {
+      } else if (!displayText && !responseText) {
         setMessages(prev => [...prev, { role: 'assistant', text: 'I received your message but had no response. Please try again.' }]);
       }
     } catch (err) {
@@ -533,6 +581,12 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
       </div>
 
       <div className="ai-chat-input-area">
+        {ctxUsage && backend === 'ollama' && (
+          <div className="ai-chat-ctx-bar" title={`${ctxUsage.promptTokens} prompt + ${ctxUsage.completionTokens} completion = ${ctxUsage.total} / ${ctxUsage.numCtx} tokens`}>
+            <div className="ai-chat-ctx-fill" style={{ width: `${Math.min(ctxUsage.percent, 100)}%`, backgroundColor: ctxUsage.percent > 80 ? '#e74c3c' : ctxUsage.percent > 50 ? '#f39c12' : '#2ecc71' }} />
+            <span className="ai-chat-ctx-label">Context: {ctxUsage.percent}%</span>
+          </div>
+        )}
         <textarea
           className="ai-chat-input"
           placeholder="Describe your program..."

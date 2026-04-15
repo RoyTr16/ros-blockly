@@ -1,6 +1,6 @@
 // Builds system prompts and block detail lookups for AI backends.
-// Phase 1 (system prompt): categories + block name + tooltip only (lightweight).
-// Phase 2 (on-demand): full DSL syntax for specific blocks the model plans to use.
+// Ollama: slim prompt (category names only) — model discovers blocks via tool calls.
+// Gemini: full prompt (all blocks + DSL) — large context window handles it fine.
 
 import { getLoadedPackages } from '../packages/PackageLoader';
 
@@ -46,7 +46,7 @@ function describeBlockDSL(blockDef) {
   return result;
 }
 
-// Build lightweight block catalog — categories + block names + tooltips
+// Build full block catalog for Gemini (large context OK)
 function buildBlockCatalog() {
   const packages = getLoadedPackages();
   let catalog = '';
@@ -55,7 +55,6 @@ function buildBlockCatalog() {
     const pkg = entry.pkg;
     const ai = pkg.ai || {};
 
-    // Use subcategories from package if available
     if (pkg.category?.subcategories) {
       for (const sub of pkg.category.subcategories) {
         const hint = ai.subcategory_hints?.[sub.name] || '';
@@ -67,7 +66,6 @@ function buildBlockCatalog() {
           }
         }
       }
-      // Any blocks not in subcategories
       const categorized = new Set(pkg.category.subcategories.flatMap(s => s.blocks.map(b => b.type)));
       const uncategorized = pkg.blocks.filter(b => !categorized.has(b.type) && b.type !== 'esp32_gpio_pin');
       if (uncategorized.length) {
@@ -85,6 +83,115 @@ function buildBlockCatalog() {
     }
   }
   return catalog;
+}
+
+// ── Category discovery (for Ollama's slim prompt approach) ──
+
+/**
+ * Get category names with short descriptions for the system prompt.
+ */
+function buildCategoryList() {
+  const packages = getLoadedPackages();
+  const categories = [];
+
+  for (const entry of Object.values(packages)) {
+    const pkg = entry.pkg;
+    const desc = pkg.description || '';
+    categories.push(`- **${pkg.name}**: ${desc}`);
+  }
+
+  // Built-in categories
+  categories.push(
+    '- **Loops**: forever, repeat N times, for loop, while/until',
+    '- **Logic**: if/else, comparisons, AND/OR, true/false',
+    '- **Math**: numbers, arithmetic, modulo',
+    '- **Variables**: set/get variables',
+    '- **Functions**: define and call functions',
+    '- **Utilities**: wait, print, elapsed time, break/continue',
+    '- **Graphing**: setup graph, plot points, graph viewer',
+  );
+  return categories.join('\n');
+}
+
+/**
+ * Get blocks in a category — returns block names + tooltips (not full DSL).
+ * Called by the get_category_blocks tool.
+ */
+export function getCategoryBlocks(categoryName) {
+  const nameLower = categoryName.toLowerCase();
+  const packages = getLoadedPackages();
+
+  // Check loaded packages first
+  for (const entry of Object.values(packages)) {
+    const pkg = entry.pkg;
+    if (pkg.name.toLowerCase() === nameLower ||
+        pkg.category?.name?.toLowerCase() === nameLower) {
+      const lines = [`## ${pkg.name} blocks:`];
+      for (const block of pkg.blocks) {
+        if (block.type === 'esp32_gpio_pin') continue;
+        lines.push(describeBlockBrief(block));
+      }
+      return lines.join('\n');
+    }
+    // Check subcategories
+    if (pkg.category?.subcategories) {
+      for (const sub of pkg.category.subcategories) {
+        if (sub.name.toLowerCase() === nameLower) {
+          const subTypes = new Set(sub.blocks.map(b => b.type));
+          const lines = [`## ${pkg.name} > ${sub.name} blocks:`];
+          for (const block of pkg.blocks) {
+            if (subTypes.has(block.type)) lines.push(describeBlockBrief(block));
+          }
+          return lines.join('\n');
+        }
+      }
+    }
+  }
+
+  // Built-in categories
+  const builtinCategories = {
+    loops: [
+      '  - **forever** ("Forever Loop"): Infinite loop',
+      '  - **controls_repeat_ext** ("Repeat N Times"): Repeat N times',
+      '  - **controls_for** ("For Loop"): For loop with counter variable',
+      '  - **controls_whileUntil** ("While/Until Loop"): While/until condition loop',
+    ],
+    logic: [
+      '  - **controls_if** ("If/Else"): If/else-if/else branching',
+      '  - **logic_compare** ("Compare"): Compare two values (EQ, NEQ, LT, LTE, GT, GTE)',
+      '  - **logic_operation** ("AND/OR"): AND/OR logic',
+      '  - **logic_boolean** ("True/False"): True/false constant',
+    ],
+    math: [
+      '  - **math_number** ("Number"): Literal number',
+      '  - **math_arithmetic** ("Math Operation"): Arithmetic (ADD, MINUS, MULTIPLY, DIVIDE, POWER)',
+      '  - **math_modulo** ("Modulo"): Modulo operation',
+    ],
+    variables: [
+      '  - **variables_set** ("Set Variable"): Set a variable value',
+      '  - **variables_get** ("Get Variable"): Get a variable value',
+    ],
+    functions: [
+      '  - **procedures_defnoreturn** ("Define Function"): Define a function',
+      '  - **procedures_callnoreturn** ("Call Function"): Call a function',
+    ],
+    utilities: [
+      '  - **wait_seconds** ("Wait"): Delay execution',
+      '  - **utilities_print** ("Print to Console"): Log text and values',
+      '  - **utilities_elapsed_time** ("Elapsed Time"): Get elapsed seconds since start',
+      '  - **controls_flow_statements** ("Break/Continue"): Break or continue a loop',
+    ],
+    graphing: [
+      '  - **utilities_setup_graph** ("Setup Graph"): Create a named graph with axis labels, color, style',
+      '  - **utilities_plot_point** ("Plot Point"): Add an (x, y) data point to a graph',
+      '  - **utilities_graph_viewer** ("Graph Viewer"): Show/hide a live chart',
+    ],
+  };
+
+  const match = builtinCategories[nameLower];
+  if (match) return `## ${categoryName} blocks:\n${match.join('\n')}`;
+
+  return `Category "${categoryName}" not found. Available categories: ${Object.keys(builtinCategories).join(', ')} and any loaded packages.`;
 }
 
 /**
@@ -166,30 +273,50 @@ export function getAllBlockTypes() {
 }
 
 export function buildSystemPrompt(mode = 'gemini') {
+  // Ollama: ultra-slim prompt — just categories + DSL rules.
+  // Tool definitions are passed separately to Ollama; the prompt should NOT describe them.
+  if (mode === 'ollama') {
+    const categoryList = buildCategoryList();
+    return `<role>You are a Blockly programming assistant. You create programs by calling tools. NEVER describe programs in text — ALWAYS call create_program.</role>
+
+<categories>
+${categoryList}
+</categories>
+
+<rules>
+- Programs are flat arrays of block objects: [{type:"block_type", ...fields}, ...]
+- Loops have a body: {type:"forever", body:[...blocks...]}
+- Variables are strings: "myVar"
+- Numbers are literals: 42
+- ONLY use block types you discovered via tools. NEVER invent block types.
+- Setup/config blocks (esp32_setup_*, variables_set for config) go BEFORE loops, never inside them.
+- Only put actions (movement, wait, print) inside loop bodies.
+- For modifications: use create_program to rebuild the entire program with your changes applied.
+</rules>
+
+<workflow>
+Step 1: Call get_category_blocks for each relevant category.
+Step 2: Call get_block_details with the block type names you need.
+Step 3: Call create_program with your blocks array. MANDATORY — never skip this step.
+</workflow>
+
+<example>
+User: "Make the robot wait 2 seconds then print hello"
+
+Step 1 — get_category_blocks(category: "Utilities")
+Result: wait_seconds, utilities_print
+
+Step 2 — get_block_details(block_types: ["wait_seconds", "utilities_print"])
+Result: {type:"wait_seconds", seconds: number}, {type:"utilities_print", text:"...", value:"..."}
+
+Step 3 — create_program(blocks: [{type:"wait_seconds",seconds:2},{type:"utilities_print",text:"hello",value:""}])
+</example>`;
+  }
+
+  // Gemini: full prompt with all blocks + DSL (large context OK)
   const blockCatalog = buildBlockCatalog();
 
-  const responseInstructions = mode === 'ollama'
-    ? `## How to Respond
-- Format all explanations using **Markdown**: use headings, bold, bullet lists, and \`inline code\` for block names.
-- **CRITICAL**: NEVER use technical block type names in explanations. Always use the human-friendly display name shown in quotes next to each block in the catalog.
-  - Say "**Setup Ultrasonic Sensor**" NOT "esp32_setup_ultrasonic"
-  - Say "**Set Pin ON**" / "**Set Pin OFF**" NOT "esp32_set_pin_on" / "esp32_set_pin_off"
-  - Say "**Forever Loop**" NOT "forever"
-  - Say "**If/Else**" NOT "controls_if"
-  - Say "**Compare**" NOT "logic_compare"
-  - Say "**Print to Console**" NOT "utilities_print"
-  - Say "**Wait**" NOT "wait_seconds"
-  - Say "**Number**" NOT "math_number"
-- When explaining a program, use the **actual variable names** from the program DSL context. Refer to variables with backticks and describe what they represent, e.g., "the distance stored in \`dist\`".
-- For questions, explanations, greetings, or "what does this do?": respond with Markdown TEXT only. Do NOT call any tools.
-- When the user asks to **create or modify** a program:
-  1. First call **get_block_details** with the block types you plan to use, to get exact DSL syntax.
-  2. Then call **create_program** (for new programs or large changes) or **modify_program** (for small changes) with the program DSL.
-- **IMPORTANT**: Always include a Markdown explanation alongside every tool call. Describe what the program does in 2-3 sentences.
-- If the user asks what a program does, describe it in Markdown. Do NOT call any tools.
-- The current program is provided in DSL format. When modifying, use it as your starting point and apply only the requested changes.
-- When regenerating a program with changes, include ALL the original blocks and logic, not just the parts you changed. The output replaces the entire workspace.`
-    : `## How to Respond
+  const responseInstructions = `## How to Respond
 - Format all explanations using **Markdown**: use headings, bold, bullet lists, and \`inline code\` for block names.
 - **CRITICAL**: NEVER use technical block type names in explanations. Always use the human-friendly display name shown in quotes next to each block in the catalog.
   - Say "**Setup Ultrasonic Sensor**" NOT "esp32_setup_ultrasonic"
@@ -205,59 +332,7 @@ export function buildSystemPrompt(mode = 'gemini') {
 - When the user asks to MODIFY the existing program: call **get_block_details** if needed, then call **modify_program** or **create_program** (for large changes).
 - **IMPORTANT**: Always include a Markdown explanation alongside every tool call.`;
 
-  const exampleSection = mode === 'ollama'
-    ? `## create_program Tool
-The "blocks" parameter is a JSON **array** of block chains. Each chain is an array of block objects.
-
-### Example — Blink a pin:
-create_program({ blocks: [
-  [
-    { type: "forever", body: [
-      { type: "esp32_set_pin_on", pin: 14 },
-      { type: "wait_seconds", seconds: 0.5 },
-      { type: "esp32_set_pin_off", pin: 14 },
-      { type: "wait_seconds", seconds: 0.5 }
-    ]}
-  ]
-]})
-
-### Example — Distance-based LED with math expressions:
-create_program({ blocks: [
-  [
-    { type: "rgb_led_setup", var: "led1", r_pin: 27, g_pin: 14, b_pin: 12 },
-    { type: "esp32_setup_ultrasonic", var: "dist", trig_pin: 17, echo_pin: 16 },
-    { type: "forever", body: [
-      { type: "rgb_led_set_color", var: "led1",
-        red: { type: "math_arithmetic", op: "MINUS", a: 255, b: "dist" },
-        green: 0,
-        blue: "dist" },
-      { type: "utilities_print", text: "Distance:", value: "dist" },
-      { type: "wait_seconds", seconds: 0.1 }
-    ]}
-  ]
-]})
-Note: For inputs that depend on variables, use the variable name as a string (e.g., "dist"). For math, use nested objects like { type: "math_arithmetic", op: "MINUS", a: 255, b: "dist" }.
-
-## modify_program Tool
-The "operations" parameter is a JSON **array** of operation objects.
-Use this for small changes. Each operation must have an "action" field. Operations:
-- **set_field**: { action: "set_field", block_type: "esp32_set_pin_on", field: "PIN", value: "2" }
-- **set_input**: { action: "set_input", block_type: "wait_seconds", input: "SECONDS", value: "0.05" }
-- **remove_block**: { action: "remove_block", block_type: "wait_seconds", occurrence: 0 }
-- **add_after**: { action: "add_after", block_type: "rgb_led_preset_color", blocks: [{...}], occurrence: 0 }
-- **insert**: { action: "insert", block: { type: "utilities_graph_viewer", var: "myGraph" } } — adds a standalone block to the workspace
-- **insert** (into chain): { action: "insert", chain: 0, position: 2, block: {...} } — inserts into an existing chain at position
-
-## get_block_details Tool
-Call this BEFORE creating a program to get the exact DSL syntax for blocks you plan to use.
-Pass an array of block type names. The system returns their DSL format, fields, and inputs.
-Example: get_block_details({ block_types: ["esp32_set_pin_on", "esp32_setup_ultrasonic"] })
-
-## Modifying a Program
-When the user asks to change, fix, or modify the existing program, **regenerate the complete program** via the **create_program** tool.
-Include ALL original blocks and logic — the output replaces the entire workspace.
-Only apply the specific changes the user asked for; keep everything else the same.`
-    : `## create_program Tool
+  const exampleSection = `## create_program Tool
 The "blocks" parameter is a **JSON string** (not an object). Encode the blocks array as a JSON string.
 The blocks array contains chains. Each chain is an array of sequential blocks.
 
