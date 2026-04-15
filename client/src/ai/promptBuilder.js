@@ -161,10 +161,11 @@ export function buildSystemPrompt(mode = 'gemini') {
 
   const responseInstructions = mode === 'ollama'
     ? `## How to Respond
-- For questions, explanations, greetings, or "what does this do?": respond with TEXT only. Do NOT include any \`\`\`json code blocks. Just explain in plain text.
+- Format all explanations using **Markdown**: use headings, bold, bullet lists, and \`inline code\` for block names.
+- For questions, explanations, greetings, or "what does this do?": respond with Markdown TEXT only. Do NOT include any \`\`\`json code blocks.
 - When the user asks to **create or modify** a program: first list the block types you plan to use, then output the full program as a \`\`\`json code block.
-- **IMPORTANT**: Always include a text explanation BEFORE the JSON code block. Describe what the program does in 2-3 sentences.
-- If the user asks what a program does, describe it in plain text. Do NOT regenerate it as JSON.
+- **IMPORTANT**: Always include a Markdown explanation BEFORE the JSON code block. Describe what the program does in 2-3 sentences.
+- If the user asks what a program does, describe it in Markdown. Do NOT regenerate it as JSON.
 - The current program is provided in DSL format (the same JSON format you output). When modifying, use it as your starting point and apply only the requested changes.
 - When regenerating a program with changes, include ALL the original blocks and logic, not just the parts you changed. The output replaces the entire workspace.
 
@@ -173,10 +174,11 @@ When creating or modifying a program, first list which block types you will use:
 "I'll use: esp32_set_pin_on, esp32_set_pin_off, esp32_setup_ultrasonic, controls_if, forever, logic_compare, wait_seconds"
 Then the system may inject DSL syntax for those blocks. After that, output the full program.`
     : `## How to Respond
-- For questions, explanations, greetings: respond with TEXT only. Do NOT call any tools.
+- Format all explanations using **Markdown**: use headings, bold, bullet lists, and \`inline code\` for block names.
+- For questions, explanations, greetings: respond with Markdown TEXT only. Do NOT call any tools.
 - When the user asks to create a NEW program: call the **get_block_details** tool first if you need DSL syntax, then call the **create_program** tool.
 - When the user asks to MODIFY the existing program: call **get_block_details** if needed, then call **modify_program** or **create_program** (for large changes).
-- **IMPORTANT**: Always include a text explanation alongside every tool call.`;
+- **IMPORTANT**: Always include a Markdown explanation alongside every tool call.`;
 
   const exampleSection = mode === 'ollama'
     ? `## Creating a Program

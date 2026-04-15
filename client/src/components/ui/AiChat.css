@@ -201,6 +201,75 @@
   border-bottom-left-radius: 4px;
 }
 
+/* Markdown content inside messages */
+.ai-chat-msg p {
+  margin: 0 0 0.4em;
+}
+
+.ai-chat-msg p:last-child {
+  margin-bottom: 0;
+}
+
+.ai-chat-msg h1, .ai-chat-msg h2, .ai-chat-msg h3 {
+  margin: 0.6em 0 0.3em;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.ai-chat-msg h1:first-child,
+.ai-chat-msg h2:first-child,
+.ai-chat-msg h3:first-child {
+  margin-top: 0;
+}
+
+.ai-chat-msg ul, .ai-chat-msg ol {
+  margin: 0.3em 0;
+  padding-left: 1.4em;
+}
+
+.ai-chat-msg li {
+  margin-bottom: 0.15em;
+}
+
+.ai-chat-msg code {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.85em;
+  color: var(--accent-indigo);
+}
+
+.ai-chat-msg pre {
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 0.4em 0;
+  overflow-x: auto;
+}
+
+.ai-chat-msg pre code {
+  background: none;
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: 0.8em;
+}
+
+.ai-chat-msg strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.ai-chat-msg a {
+  color: var(--accent-indigo);
+  text-decoration: none;
+}
+
+.ai-chat-msg a:hover {
+  text-decoration: underline;
+}
+
 .ai-chat-apply-btn {
   background: var(--accent-indigo);
   border: none;

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import * as Blockly from 'blockly/core';
+import ReactMarkdown from 'react-markdown';
 import * as geminiBackend from '../../ai/gemini';
 import * as ollamaBackend from '../../ai/ollama';
 import { compileDSL } from '../../ai/dslCompiler';
@@ -411,7 +412,9 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
         )}
         {messages.map((msg, i) => (
           <div key={i} className={`ai-chat-msg ${msg.role}`}>
-            {msg.text}
+            {msg.role === 'assistant' || msg.role === 'error' || msg.role === 'success'
+              ? <ReactMarkdown>{msg.text}</ReactMarkdown>
+              : msg.text}
             {msg.role === 'pending' && pendingJson && (
               <div className="ai-chat-btn-row">
                 <button className="ai-chat-apply-btn" onClick={handleApply}>
