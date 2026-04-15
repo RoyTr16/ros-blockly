@@ -1,12 +1,13 @@
-// Gemini API wrapper for Blockly code generation (REST API)
+// Gemini API wrapper with function calling for DSL-based block generation
 import { buildSystemPrompt } from './promptBuilder';
+import { buildToolDeclarations } from './toolDefinitions';
 
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const MODEL = 'gemini-3-flash-preview';
 
 let apiKey = null;
-let chatHistory = []; // { role: 'user'|'model', parts: [{ text }] }
-let thinkingLevel = 'off'; // 'off' | 'on' (maps to 'minimal' | 'high')
+let chatHistory = []; // { role: 'user'|'model', parts: [...] }
+let thinkingLevel = 'off'; // 'off' | 'on'
 
 export function initGemini(key) {
   apiKey = key;
@@ -23,7 +24,7 @@ export function resetChat() {
 
 export function setThinkingLevel(level) {
   thinkingLevel = level;
-  chatHistory = []; // reset chat since thinking mode changes model behavior
+  chatHistory = [];
 }
 
 export function getThinkingLevel() {
@@ -31,9 +32,13 @@ export function getThinkingLevel() {
 }
 
 async function callApi(contents, retries = 1) {
+  const tools = [{ functionDeclarations: buildToolDeclarations() }];
+
   const body = {
     contents,
     systemInstruction: { parts: [{ text: buildSystemPrompt() }] },
+    tools,
+    toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
     generationConfig: {
       temperature: 0.2,
       maxOutputTokens: 65536,
@@ -65,17 +70,32 @@ async function callApi(contents, retries = 1) {
   const parts = candidate?.content?.parts;
   if (!parts) throw new Error('No response from model');
 
-  // Detect truncated response
   if (candidate.finishReason === 'MAX_TOKENS') {
     throw new Error('Response was truncated — the program may be too complex. Try requesting a simpler version.');
   }
 
-  // Filter out thought parts, return only text
-  const textParts = parts.filter(p => !p.thought && p.text);
-  return textParts.map(p => p.text).join('');
+  return { parts, rawContent: candidate.content };
 }
 
-// Sends a user message (optionally with current workspace code for context) and returns the raw response text
+// Parse the response parts into a structured result
+function parseResponse(parts) {
+  const result = { text: '', toolCalls: [] };
+
+  for (const part of parts) {
+    if (part.thought) continue; // skip thinking
+    if (part.text) result.text += part.text;
+    if (part.functionCall) {
+      result.toolCalls.push({
+        name: part.functionCall.name,
+        args: part.functionCall.args,
+      });
+    }
+  }
+
+  return result;
+}
+
+// Send a message and get back { text, toolCalls }
 export async function sendMessage(userMessage, currentWorkspaceCode = null) {
   if (!apiKey) throw new Error('Gemini not initialized. Please set your API key.');
 
@@ -84,32 +104,12 @@ export async function sendMessage(userMessage, currentWorkspaceCode = null) {
     fullMessage += `\n\nCurrent program (generated JavaScript):\n\`\`\`javascript\n${currentWorkspaceCode}\n\`\`\``;
   }
 
-  // Add user message to history
   chatHistory.push({ role: 'user', parts: [{ text: fullMessage }] });
 
-  const responseText = await callApi(chatHistory);
+  const { parts, rawContent } = await callApi(chatHistory);
 
-  // Add model response to history
-  chatHistory.push({ role: 'model', parts: [{ text: responseText }] });
+  // Add model response to history (include function call parts for context)
+  chatHistory.push({ role: 'model', parts: rawContent.parts });
 
-  return responseText;
-}
-
-// Extract JSON from a response string, returns { json, explanation } or null
-export function extractBlocklyJson(text) {
-  // Match all ```json ... ``` blocks (greedy within each block)
-  const jsonMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
-  if (!jsonMatch) return null;
-
-  const jsonStr = jsonMatch[1].trim();
-  // Get explanation text (everything outside the code block)
-  const explanation = text.replace(/```(?:json)?\s*\n?[\s\S]*?\n?\s*```/, '').trim();
-
-  try {
-    const json = JSON.parse(jsonStr);
-    return { json, explanation };
-  } catch (e) {
-    // JSON parse failed — return the raw JSON string so caller can report
-    return { json: null, explanation, parseError: e.message, rawJson: jsonStr };
-  }
+  return parseResponse(parts);
 }

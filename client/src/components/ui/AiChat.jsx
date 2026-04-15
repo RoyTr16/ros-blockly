@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import * as Blockly from 'blockly/core';
-import { initGemini, isInitialized, sendMessage, extractBlocklyJson, resetChat, setThinkingLevel, getThinkingLevel } from '../../ai/gemini';
+import { initGemini, isInitialized, sendMessage, resetChat, setThinkingLevel, getThinkingLevel } from '../../ai/gemini';
+import { compileDSL } from '../../ai/dslCompiler';
 import './AiChat.css';
 
 const API_KEY_STORAGE = 'gemini_api_key';
@@ -59,169 +60,10 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
     localStorage.removeItem(API_KEY_STORAGE);
   };
 
-  // Validate all block types in a workspace JSON exist in Blockly
-  const findInvalidBlocks = (json) => {
-    const invalid = new Set();
-    const check = (obj) => {
-      if (!obj) return;
-      if (obj.type && !Blockly.Blocks[obj.type]) invalid.add(obj.type);
-      if (obj.next?.block) check(obj.next.block);
-      if (obj.inputs) {
-        for (const inp of Object.values(obj.inputs)) {
-          if (inp.block) check(inp.block);
-        }
-      }
-    };
-    if (json?.blocks?.blocks) json.blocks.blocks.forEach(check);
-    return [...invalid];
-  };
-
-  // Detect blocks with missing required value inputs
-  const findMissingInputs = (json) => {
-    const issues = [];
-    // Map of block types to their required value inputs
-    const requiredInputs = {
-      controls_repeat_ext: ['TIMES'],
-      controls_for: ['FROM', 'TO', 'BY'],
-      controls_whileUntil: ['BOOL'],
-      logic_compare: ['A', 'B'],
-      logic_operation: ['A', 'B'],
-      math_arithmetic: ['A', 'B'],
-      variables_set: ['VALUE'],
-    };
-    const walk = (block) => {
-      if (!block) return;
-      const req = requiredInputs[block.type];
-      if (req) {
-        const missing = req.filter(inp => !block.inputs?.[inp]?.block && !block.inputs?.[inp]?.shadow);
-        if (missing.length > 0) {
-          issues.push(`${block.type} is missing required input(s): ${missing.join(', ')}. Connect a block (e.g. math_number) to each.`);
-        }
-      }
-      if (block.next?.block) walk(block.next.block);
-      if (block.inputs) {
-        for (const inp of Object.values(block.inputs)) {
-          if (inp.block) walk(inp.block);
-        }
-      }
-    };
-    if (json?.blocks?.blocks) json.blocks.blocks.forEach(walk);
-    return [...new Set(issues)];
-  };
-
-  // Detect variable misuse: single-letter names, action blocks using different vars than setup blocks
-  const findVariableIssues = (json) => {
-    const issues = [];
-    if (!json?.blocks?.blocks || !json?.variables) return issues;
-
-    // Check 1: Single-letter variable names
-    const singleLetterVars = json.variables.filter(v => /^[a-zA-Z]$/.test(v.name));
-    if (singleLetterVars.length > 0) {
-      issues.push(`Variables have single-letter names (${singleLetterVars.map(v => `"${v.name}"`).join(', ')}). Use descriptive names like "led1", "sensor1".`);
-    }
-
-    // Collect all blocks that have a VAR field
-    const varBlocks = [];
-    const walk = (block) => {
-      if (!block) return;
-      if (block.type && block.fields?.VAR) {
-        const varRef = block.fields.VAR;
-        const varId = typeof varRef === 'object' ? varRef.id : varRef;
-        varBlocks.push({ type: block.type, varId });
-      }
-      if (block.next?.block) walk(block.next.block);
-      if (block.inputs) {
-        for (const inp of Object.values(block.inputs)) {
-          if (inp.block) walk(inp.block);
-        }
-      }
-    };
-    json.blocks.blocks.forEach(walk);
-
-    // Check 2: Action blocks using different vars than their setup block
-    const setupFamilies = {}; // family prefix -> Set of varIds
-    for (const vb of varBlocks) {
-      const m = vb.type.match(/^(.+?)_setup/);
-      if (m) {
-        const family = m[1];
-        if (!setupFamilies[family]) setupFamilies[family] = new Set();
-        setupFamilies[family].add(vb.varId);
-      }
-    }
-    for (const vb of varBlocks) {
-      if (vb.type.includes('_setup')) continue;
-      for (const [family, setupVars] of Object.entries(setupFamilies)) {
-        if (vb.type.startsWith(family + '_') && !setupVars.has(vb.varId)) {
-          const setupNames = [...setupVars].map(id => {
-            const v = json.variables.find(v => v.id === id);
-            return v ? `"${v.name}"` : id;
-          });
-          issues.push(`${vb.type} blocks must use the same variable as the setup block (${setupNames.join(' or ')}), not separate variables.`);
-          break;
-        }
-      }
-    }
-
-    return [...new Set(issues)];
-  };
-
-  // Auto-fix known JSON issues that the LLM consistently gets wrong
-  const autoFixJson = (json) => {
-    if (!json?.blocks?.blocks) return json;
-    const fixed = JSON.parse(JSON.stringify(json)); // deep clone
-    const walk = (block) => {
-      if (!block) return;
-      // Fix controls_if: infer extraState from inputs
-      if (block.type === 'controls_if' && block.inputs) {
-        let elseIfCount = 0;
-        let hasElse = false;
-        for (const key of Object.keys(block.inputs)) {
-          const m = key.match(/^IF(\d+)$/);
-          if (m && parseInt(m[1]) > 0) elseIfCount = Math.max(elseIfCount, parseInt(m[1]));
-          if (key === 'ELSE') hasElse = true;
-        }
-        if (elseIfCount > 0 || hasElse) {
-          block.extraState = { elseIfCount, hasElse };
-        }
-      }
-      if (block.next?.block) walk(block.next.block);
-      if (block.inputs) {
-        for (const inp of Object.values(block.inputs)) {
-          if (inp.block) walk(inp.block);
-        }
-      }
-    };
-    fixed.blocks.blocks.forEach(walk);
-    return fixed;
-  };
-
-  // Run all validators and return issues list
-  const findAllIssues = (json) => {
-    return [
-      ...findInvalidBlocks(json).map(b => `Block type "${b}" does not exist. Use only blocks from the catalog.`),
-      ...findVariableIssues(json),
-      ...findMissingInputs(json),
-    ];
-  };
-
-  // Build a structured fix message for the LLM based on error type
-  const buildFixMessage = (errorMsg) => {
-    let instructions = '';
-    if (errorMsg.includes('missing a(n) IF')) {
-      instructions = '\nFix: controls_if blocks with else-if/else branches MUST have "extraState": {"elseIfCount": N, "hasElse": true/false}. Count the number of else-if branches (IF1, IF2, etc.) to set elseIfCount. Set hasElse to true if there is an ELSE input.';
-    } else if (errorMsg.includes('does not exist') || errorMsg.includes('don\'t exist')) {
-      instructions = '\nFix: You used a block type that does not exist. Only use block types from the available blocks catalog. Re-check your block type names.';
-    } else if (errorMsg.includes('missing') && errorMsg.includes('connection')) {
-      instructions = '\nFix: A block is missing a required input connection. Make sure every input that the block expects has a connected block (e.g. math_number for numeric inputs, logic_boolean for boolean inputs).';
-    }
-    return `Blockly rejected your JSON with this error:\n"${errorMsg}"\n${instructions}\nPlease fix the issue and resend the complete corrected workspace JSON.`;
-  };
-
   // Try to load JSON into workspace to test validity, then restore previous state
   const testLoad = (json) => {
     const ws = blocklyRef?.current?.getWorkspace?.();
     if (!ws) return 'No workspace available';
-    // Save current state so we can restore after test
     const savedState = Blockly.serialization.workspaces.save(ws);
     try {
       Blockly.serialization.workspaces.load(json, ws);
@@ -229,22 +71,56 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
     } catch (err) {
       return err.message;
     } finally {
-      // Always restore the original workspace
       try { Blockly.serialization.workspaces.load(savedState, ws); } catch (e) { /* best effort */ }
     }
   };
 
-  // Full validation pipeline: auto-fix, static checks, test load. Returns { json, error }
-  const validateJson = (json) => {
-    // Step 1: Auto-fix known issues
-    const fixed = autoFixJson(json);
-    // Step 2: Static analysis
-    const issues = findAllIssues(fixed);
-    if (issues.length > 0) return { json: fixed, error: issues.join('\n') };
-    // Step 3: Test load into actual workspace
-    const loadErr = testLoad(fixed);
-    if (loadErr) return { json: fixed, error: loadErr };
-    return { json: fixed, error: null };
+  // Apply modify_program operations to the current workspace JSON
+  const applyModifications = (operations) => {
+    const ws = blocklyRef?.current?.getWorkspace?.();
+    if (!ws) return { error: 'No workspace available' };
+    const json = Blockly.serialization.workspaces.save(ws);
+    if (!json?.blocks?.blocks?.length) return { error: 'Workspace is empty — nothing to modify.' };
+
+    const modified = JSON.parse(JSON.stringify(json)); // deep clone
+
+    for (const op of operations) {
+      let found = false;
+      let occurrence = op.occurrence ?? 0;
+      let count = 0;
+
+      const walk = (block) => {
+        if (!block || found) return;
+        if (block.type === op.block_type) {
+          if (count === occurrence) {
+            if (op.action === 'set_field') {
+              block.fields = block.fields || {};
+              block.fields[op.field] = op.value;
+              found = true;
+            } else if (op.action === 'set_input') {
+              block.inputs = block.inputs || {};
+              block.inputs[op.input] = { block: { type: 'math_number', id: 'm' + Date.now(), fields: { NUM: Number(op.value) } } };
+              found = true;
+            } else if (op.action === 'remove_block') {
+              block._remove = true;
+              found = true;
+            }
+          }
+          count++;
+        }
+        if (block.next?.block) walk(block.next.block);
+        if (block.inputs) {
+          for (const inp of Object.values(block.inputs)) {
+            if (inp.block) walk(inp.block);
+          }
+        }
+      };
+
+      modified.blocks.blocks.forEach(walk);
+      if (!found) return { error: `Could not find block "${op.block_type}" (occurrence ${occurrence}).` };
+    }
+
+    return { json: modified, error: null };
   };
 
   // Show preview: save current workspace, load new JSON, activate overlay
@@ -312,77 +188,44 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
     setPendingJson(null);
 
     try {
-      // Get current generated code for context (compact JS instead of bulky JSON)
       const currentCode = generatedCode?.trim() || null;
+      const { text: responseText, toolCalls } = await sendMessage(text, currentCode);
 
-      let responseText = await sendMessage(text, currentCode);
-      let extracted = extractBlocklyJson(responseText);
-
-      if (!extracted) {
-        // Pure conversation — no code block in response
+      // Show text response if any
+      if (responseText) {
         setMessages(prev => [...prev, { role: 'assistant', text: responseText }]);
-      } else if (extracted.parseError || !extracted.json) {
-        // LLM sent a code block but JSON was invalid
-        // Show explanation if present — it may be all the user needed
-        if (extracted.explanation) {
-          setMessages(prev => [...prev, { role: 'assistant', text: extracted.explanation }]);
+      }
+
+      // Process tool calls
+      const createCall = toolCalls.find(tc => tc.name === 'create_program');
+      const modifyCall = toolCalls.find(tc => tc.name === 'modify_program');
+
+      if (createCall) {
+        const json = compileDSL(createCall.args);
+        const loadErr = testLoad(json);
+        if (loadErr) {
+          setMessages(prev => [...prev, { role: 'error', text: `Block load error: ${loadErr}` }]);
+        } else {
+          setPendingJson(json);
+          showPreview(json);
+          setMessages(prev => [...prev, { role: 'pending', text: 'Program ready. Preview shown in workspace.' }]);
         }
-        // Only retry the JSON fix if the user's message looks like a program request
-        const looksLikeProgramRequest = /\b(create|make|build|write|generate|modify|change|add|remove|update|program|code)\b/i.test(text);
-        if (looksLikeProgramRequest) {
-          const fixMsg = `Your JSON had a parse error: "${extracted.parseError}". Please fix and resend only the corrected JSON.`;
-          responseText = await sendMessage(fixMsg, null);
-          extracted = extractBlocklyJson(responseText);
-          if (!extracted || !extracted.json) {
-            const detail = extracted?.parseError || 'no JSON in response';
-            setMessages(prev => [...prev, { role: 'error', text: `Could not generate valid JSON (${detail}). The program may be too complex — try a simpler request.` }]);
+      } else if (modifyCall) {
+        const result = applyModifications(modifyCall.args.operations || []);
+        if (result.error) {
+          setMessages(prev => [...prev, { role: 'error', text: result.error }]);
+        } else {
+          const loadErr = testLoad(result.json);
+          if (loadErr) {
+            setMessages(prev => [...prev, { role: 'error', text: `Modification error: ${loadErr}` }]);
           } else {
-            if (extracted.explanation) {
-              setMessages(prev => [...prev, { role: 'assistant', text: extracted.explanation }]);
-            }
-            let result = validateJson(extracted.json);
-            if (result.error) {
-              setMessages(prev => [...prev, { role: 'error', text: `Validation: ${result.error}` }]);
-              const fixMsg2 = buildFixMessage(result.error);
-              responseText = await sendMessage(fixMsg2, null);
-              extracted = extractBlocklyJson(responseText);
-              if (!extracted || !extracted.json) throw new Error(`AI responded without code after: ${result.error}`);
-              result = validateJson(extracted.json);
-              if (result.error) throw new Error(`Validation failed: ${result.error}`);
-            }
             setPendingJson(result.json);
             showPreview(result.json);
-            setMessages(prev => [...prev, { role: 'pending', text: 'Program ready. Preview shown in workspace.' }]);
+            setMessages(prev => [...prev, { role: 'pending', text: 'Modifications ready. Preview shown in workspace.' }]);
           }
         }
-      } else {
-        // Valid JSON — run full validation pipeline (auto-fix + static checks + test load)
-        if (extracted.explanation) {
-          setMessages(prev => [...prev, { role: 'assistant', text: extracted.explanation }]);
-        }
-
-        let result = validateJson(extracted.json);
-
-        // Retry up to 2 times on validation errors
-        for (let attempt = 0; attempt < 2 && result.error; attempt++) {
-          // Show the validation error to the user so they have visibility
-          setMessages(prev => [...prev, { role: 'error', text: `Validation: ${result.error}` }]);
-          const fixMsg = buildFixMessage(result.error);
-          responseText = await sendMessage(fixMsg, null);
-          extracted = extractBlocklyJson(responseText);
-          if (!extracted || !extracted.json) {
-            throw new Error(`AI responded without code after: ${result.error}`);
-          }
-          if (extracted.explanation) {
-            setMessages(prev => [...prev, { role: 'assistant', text: extracted.explanation }]);
-          }
-          result = validateJson(extracted.json);
-        }
-
-        if (result.error) throw new Error(`Validation failed: ${result.error}`);
-        setPendingJson(result.json);
-        showPreview(result.json);
-        setMessages(prev => [...prev, { role: 'pending', text: 'Program ready. Preview shown in workspace.' }]);
+      } else if (!responseText) {
+        setMessages(prev => [...prev, { role: 'assistant', text: 'I received your message but had no response. Please try again.' }]);
       }
     } catch (err) {
       console.error('AI Chat error:', err);

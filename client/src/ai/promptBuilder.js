@@ -1,48 +1,43 @@
-// Builds a system prompt from loaded packages, describing available blocks
-// and the Blockly JSON serialization format for the LLM.
+// Builds a system prompt from loaded packages, describing the simplified DSL format
+// that the LLM uses with function calling to create/modify Blockly programs.
 
 import { getLoadedPackages } from '../packages/PackageLoader';
 
-function describeBlock(blockDef) {
+function describeBlockDSL(blockDef) {
   const def = blockDef.definition;
-  const parts = [`- **${blockDef.type}**: "${def.tooltip || def.message0 || ''}"`];
+  const parts = [`- **${blockDef.type}**: ${def.tooltip || def.message0 || ''}`];
 
-  // Describe fields
+  // Collect fields and inputs
   const allArgs = [];
   for (let i = 0; i < 10; i++) {
     if (def[`args${i}`]) allArgs.push(...def[`args${i}`]);
   }
 
-  const fields = allArgs.filter(a => a.type === 'field_dropdown' || a.type === 'field_input' || a.type === 'field_number' || a.type === 'field_variable');
-  const inputs = allArgs.filter(a => a.type === 'input_value' || a.type === 'input_statement');
+  const dslProps = [];
+  const fields = allArgs.filter(a => a.type.startsWith('field_'));
+  const inputs = allArgs.filter(a => a.type === 'input_value');
 
-  if (fields.length > 0) {
-    const fieldDescs = fields.map(f => {
-      if (f.type === 'field_dropdown') {
-        const opts = f.options.map(o => `"${o[1]}"`).join(', ');
-        return `${f.name} (dropdown: ${opts})`;
-      }
-      if (f.type === 'field_variable') return `${f.name} (variable, default: "${f.variable || 'item'}")`;
-      if (f.type === 'field_number') return `${f.name} (number)`;
-      return `${f.name} (text)`;
-    });
-    parts.push(`  Fields: ${fieldDescs.join('; ')}`);
+  for (const f of fields) {
+    if (f.type === 'field_variable') {
+      dslProps.push(`var: "${f.variable || 'item'}" (variable name — shared with setup block)`);
+    } else if (f.type === 'field_dropdown') {
+      const opts = f.options.map(o => `"${o[1]}"`).join(', ');
+      dslProps.push(`${f.name.toLowerCase()}: one of [${opts}]`);
+    } else if (f.type === 'field_number') {
+      dslProps.push(`${f.name.toLowerCase()}: number`);
+    } else {
+      dslProps.push(`${f.name.toLowerCase()}: "text"`);
+    }
   }
 
-  if (inputs.length > 0) {
-    const inputDescs = inputs.map(i => {
-      const check = i.check ? ` [${i.check}]` : '';
-      return `${i.name}${check}`;
-    });
-    parts.push(`  Inputs: ${inputDescs.join(', ')}`);
+  for (const inp of inputs) {
+    const check = inp.check || 'any';
+    dslProps.push(`${inp.name.toLowerCase()}: ${check === 'Pin' ? 'pin number (e.g. 27)' : 'number or expression'}`);
   }
 
-  // Connection type
-  const connections = [];
-  if (def.previousStatement !== undefined) connections.push('previousStatement');
-  if (def.nextStatement !== undefined) connections.push('nextStatement');
-  if (def.output !== undefined) connections.push(`output: ${def.output || 'any'}`);
-  if (connections.length) parts.push(`  Connections: ${connections.join(', ')}`);
+  if (dslProps.length > 0) {
+    parts.push(`  DSL: { type: "${blockDef.type}", ${dslProps.join(', ')} }`);
+  }
 
   return parts.join('\n');
 }
@@ -54,215 +49,119 @@ export function buildSystemPrompt() {
   for (const [id, entry] of Object.entries(packages)) {
     blockCatalog += `\n### Package: ${entry.pkg.name}\n`;
     for (const block of entry.pkg.blocks) {
-      blockCatalog += describeBlock(block) + '\n';
+      blockCatalog += describeBlockDSL(block) + '\n';
     }
   }
 
   return `You are a friendly Blockly programming assistant for a robotics control GUI.
-You can have normal conversations, answer questions about the blocks, explain concepts, and help users.
-Only include a Blockly workspace JSON code block when the user explicitly asks you to create, modify, build, or generate a program.
+You help users create and modify visual block programs using function calling tools.
 
-## Response Format
-- For questions, explanations, greetings, or any non-programming request: respond with TEXT ONLY. Do NOT include any code blocks.
-- When the user asks you to create or modify a program: include the workspace JSON inside a \`\`\`json code block, AND add a brief explanation.
-- If the user asks "what does my program do?" or "explain this" — respond with text only. Do NOT regenerate the program as JSON.
-- You may combine explanation text and a JSON code block in the same response.
-- If the user asks to modify the current program, you will receive the current generated JavaScript code as context. Use it to understand the existing program structure, then generate a complete Blockly workspace JSON with the requested modifications. Do NOT output JavaScript — always output Blockly JSON.
+## How to Respond
+- For questions, explanations, greetings: respond with TEXT only. Do NOT call any tools.
+- When the user asks to create a NEW program: call the **create_program** tool.
+- When the user asks to MODIFY the existing program (change a value, add/remove a block): call the **modify_program** tool.
+- Always include a brief text explanation of what you did alongside any tool call.
 
-## Available Blocks
+## Available Hardware Blocks
 ${blockCatalog}
 
-## Built-in Blockly Blocks
-You can also use standard Blockly blocks:
-- **controls_repeat_ext**: Repeat N times. Input: TIMES (connect a math_number block!), statement input: DO. Example:
-  "inputs": { "TIMES": { "block": { "type": "math_number", "id": "...", "fields": { "NUM": 10 } } }, "DO": { "block": { ... } } }
-  WARNING: TIMES is an INPUT that needs a math_number block, NOT a field. Never leave it empty.
-- **controls_whileUntil**: While/until loop. Field: MODE ("WHILE"/"UNTIL"), input: BOOL, statement: DO
-- **controls_for**: For loop. Field: VAR, inputs: FROM, TO, BY (connect math_number blocks!), statement: DO
-- **controls_if**: If/else-if/else. Inputs: IF0 (condition), DO0 (body). For else-if add IF1/DO1, IF2/DO2 etc. For else add ELSE.
-  IMPORTANT: When using else-if or else, you MUST include "extraState" on the block:
-  "extraState": { "elseIfCount": 1, "hasElse": true }  ← set elseIfCount to the number of else-if branches.
-  Example (if / else-if / else):
-  { "type": "controls_if", "id": "x", "extraState": { "elseIfCount": 1, "hasElse": true },
-    "inputs": { "IF0": { "block": ... }, "DO0": { "block": ... }, "IF1": { "block": ... }, "DO1": { "block": ... }, "ELSE": { "block": ... } } }
-- **logic_compare**: Compare. Field: OP ("EQ","NEQ","LT","LTE","GT","GTE"), inputs: A, B
-- **logic_operation**: AND/OR. Field: OP ("AND"/"OR"), inputs: A, B
-- **logic_boolean**: Boolean. Field: BOOL ("TRUE"/"FALSE")
-- **math_number**: Number literal. Field: NUM
-- **math_arithmetic**: Arithmetic. Field: OP ("ADD","MINUS","MULTIPLY","DIVIDE","POWER"), inputs: A, B
-- **math_trig**: Trig functions. Field: OP ("SIN","COS","TAN","ASIN","ACOS","ATAN"), input: NUM
-- **math_round**: Round. Field: OP ("ROUND","ROUNDUP","ROUNDDOWN"), input: NUM
-- **variables_set**: Set variable. Field: VAR, input: VALUE
-- **variables_get**: Get variable. Field: VAR
-- **procedures_defnoreturn**: Define function (no return). Field: NAME, statement: STACK
-- **procedures_defreturn**: Define function (with return). Field: NAME, statement: STACK, input: RETURN
-- **procedures_callnoreturn**: Call function. Field: NAME
-- **procedures_callreturn**: Call function (returns value). Field: NAME
+## Built-in Control Blocks (DSL format)
 
-## Utility Blocks (always available)
-- **wait_seconds**: Wait/delay. Field: SECONDS (number, default 1). This is a FIELD not an input — set it like: "fields": {"SECONDS": 2}. Do NOT connect a block to it.
-- **utilities_print**: Print/log a message. Input: TEXT (any).
-- **utilities_elapsed_time**: Returns elapsed time in seconds since program start. Output: Number.
+### Loops
+- **forever**: Infinite loop. { type: "forever", body: [...blocks...] }
+- **controls_repeat_ext**: Repeat N times. { type: "controls_repeat_ext", times: 10, body: [...] }
+- **controls_for**: For loop. { type: "controls_for", var: "counter", from: 0, to: 100, by: 1, body: [...] }
+- **controls_whileUntil**: While/until. { type: "controls_whileUntil", mode: "WHILE", condition: {expr}, body: [...] }
 
-IMPORTANT: Do NOT invent or hallucinate block types. Only use block types listed above or in the package block list.
+### Logic
+- **controls_if**: If/else-if/else. { type: "controls_if", if0: {condition}, do0: [...], if1: {condition}, do1: [...], else: [...] }
+- **logic_compare**: Compare values. { type: "logic_compare", op: "LT", a: {expr}, b: {expr} }
+  ops: "EQ", "NEQ", "LT", "LTE", "GT", "GTE"
+- **logic_operation**: AND/OR. { type: "logic_operation", op: "AND", a: {expr}, b: {expr} }
+- **logic_boolean**: { type: "logic_boolean", value: true }
 
-## Blockly JSON Serialization Format
+### Math
+- **math_number**: Literal number. { type: "math_number", value: 42 }
+- **math_arithmetic**: Arithmetic. { type: "math_arithmetic", op: "ADD", a: {expr}, b: {expr} }
+  ops: "ADD", "MINUS", "MULTIPLY", "DIVIDE", "POWER"
+- **math_modulo**: Modulo. { type: "math_modulo", a: {expr}, b: {expr} }
 
-The workspace JSON has this structure:
-\`\`\`json
-{
-  "blocks": {
-    "languageVersion": 0,
-    "blocks": [
-      {
-        "type": "block_type_name",
-        "id": "unique_id",
-        "x": 50, "y": 50,
-        "fields": { "FIELD_NAME": "value" },
-        "inputs": {
-          "INPUT_NAME": {
-            "block": { "type": "...", "id": "...", "fields": {...} }
-          },
-          "STATEMENT_INPUT": {
-            "block": {
-              "type": "...", "id": "...",
-              "next": { "block": { "type": "...", "id": "..." } }
-            }
-          }
-        },
-        "next": { "block": { "type": "...", "id": "..." } }
-      }
-    ]
-  },
-  "variables": [
-    { "name": "varName", "id": "unique_var_id" }
+### Variables
+- **variables_set**: Set variable. { type: "variables_set", var: "myVar", value: {expr} }
+- **variables_get**: Get variable. { type: "variables_get", var: "myVar" }
+- Variable references in expressions: just use the variable name as a string (e.g., "led1")
+
+### Functions
+- **procedures_defnoreturn**: Define function. { type: "procedures_defnoreturn", name: "doSomething", body: [...] }
+- **procedures_callnoreturn**: Call function. { type: "procedures_callnoreturn", name: "doSomething" }
+
+### Utilities
+- **wait_seconds**: Delay. { type: "wait_seconds", seconds: 2 }
+- **utilities_print**: Log text. { type: "utilities_print", text: "Value:", value: "myVar" }
+- **utilities_elapsed_time**: Get elapsed seconds. { type: "utilities_elapsed_time" }
+- **controls_flow_statements**: Break/continue. { type: "controls_flow_statements", flow: "BREAK" }
+
+## create_program Tool
+The "blocks" parameter is an array of block chains. Each chain is an array of sequential blocks.
+Separate chains are used for independent stacks (e.g., function definitions + main program).
+
+### Example — RGB LED cycle:
+create_program({ blocks: [
+  [
+    { type: "rgb_led_setup", var: "led1", r_pin: 27, g_pin: 14, b_pin: 12 },
+    { type: "forever", body: [
+      { type: "rgb_led_preset_color", var: "led1", color: "RED" },
+      { type: "wait_seconds", seconds: 1 },
+      { type: "rgb_led_preset_color", var: "led1", color: "GREEN" },
+      { type: "wait_seconds", seconds: 1 },
+      { type: "rgb_led_preset_color", var: "led1", color: "BLUE" },
+      { type: "wait_seconds", seconds: 1 }
+    ]}
   ]
-}
-\`\`\`
+]})
 
-Key rules:
-1. Every block needs a unique "id" (use short random strings like "a1", "b2", "c3", etc.)
-2. Variables used in field_variable fields must be declared in the top-level "variables" array
-3. Statement blocks connect via "next" for sequential execution
-4. Value inputs connect via "inputs" > "INPUT_NAME" > "block"
-5. Statement inputs (like loop bodies) use "inputs" > "DO" > "block"
-6. Only the first top-level block needs "x" and "y" coordinates
-7. For field_variable, use the variable name as the field value, and reference the same id in the variables array
-8. field_dropdown values must be one of the valid options listed above
+### Example — Function + main:
+create_program({ blocks: [
+  [{ type: "procedures_defnoreturn", name: "blink", body: [
+    { type: "esp32_set_pin_on", pin: 5 },
+    { type: "wait_seconds", seconds: 0.5 },
+    { type: "esp32_set_pin_off", pin: 5 },
+    { type: "wait_seconds", seconds: 0.5 }
+  ]}],
+  [
+    { type: "controls_repeat_ext", times: 10, body: [
+      { type: "procedures_callnoreturn", name: "blink" }
+    ]}
+  ]
+]})
 
-## Variable fields
-For blocks with field_variable (like rgb_led_setup's VAR field), set the field value to the variable name:
-\`\`\`json
-"fields": { "VAR": { "id": "var_id_1" } }
-\`\`\`
-And declare it in variables:
-\`\`\`json
-"variables": [{ "name": "led1", "id": "var_id_1" }]
-\`\`\`
+### Example — Rainbow with for loop:
+create_program({ blocks: [
+  [
+    { type: "rgb_led_setup", var: "led1", r_pin: 27, g_pin: 14, b_pin: 12 },
+    { type: "forever", body: [
+      { type: "controls_for", var: "intensity", from: 0, to: 255, by: 5, body: [
+        { type: "rgb_led_set_color", var: "led1", red: "intensity", green: 0, blue: { type: "math_arithmetic", op: "MINUS", a: 255, b: "intensity" } },
+        { type: "wait_seconds", seconds: 0.02 }
+      ]}
+    ]}
+  ]
+]})
 
-## ⚠ CRITICAL VARIABLE RULES — READ CAREFULLY
+## modify_program Tool
+Use this for small changes. Operations:
+- **set_field**: Change a field value. { action: "set_field", block_type: "wait_seconds", field: "SECONDS", value: "0.05" }
+- **set_input**: Change an input value. { action: "set_input", block_type: "rgb_led_set_color", input: "RED", value: "128" }
+- **remove_block**: Remove a block. { action: "remove_block", block_type: "wait_seconds", occurrence: 0 }
+- **add_after**: Insert blocks after a target. { action: "add_after", block_type: "rgb_led_preset_color", blocks: [{...}], occurrence: 0 }
+Use "occurrence" (0-indexed) to target a specific instance when multiple blocks of the same type exist.
 
-**Rule 1 — Variable reuse:** When a setup block (rgb_led_setup, esp32_setup_ultrasonic) stores its result in a variable, ALL subsequent blocks that operate on that device MUST reference the EXACT SAME variable id. Never create a new variable for each action block.
-
-**Rule 2 — Naming:** Use descriptive names like "led1", "sensor1", "distance". NEVER use single-letter names (i, j, k, m, n, x, y).
-
-**Rule 3 — Variable count:** If you have 1 setup block, you need exactly 1 variable for it. If 3 action blocks use that device, all 3 must share the same variable id.
-
-### Variable reuse example — RGB LED setup + preset colors:
-notice how EVERY block uses the same VAR id "v_led1" and the variables array has only ONE entry:
-\`\`\`json
-{
-  "blocks": {
-    "languageVersion": 0,
-    "blocks": [{
-      "type": "rgb_led_setup", "id": "s1", "x": 50, "y": 50,
-      "fields": { "VAR": { "id": "v_led1" } },
-      "inputs": {
-        "R_PIN": { "block": { "type": "esp32_gpio_pin", "id": "p1", "fields": { "PIN": "27" } } },
-        "G_PIN": { "block": { "type": "esp32_gpio_pin", "id": "p2", "fields": { "PIN": "14" } } },
-        "B_PIN": { "block": { "type": "esp32_gpio_pin", "id": "p3", "fields": { "PIN": "12" } } }
-      },
-      "next": { "block": {
-        "type": "rgb_led_preset_color", "id": "c1",
-        "fields": { "VAR": { "id": "v_led1" }, "COLOR": "RED" },
-        "next": { "block": {
-          "type": "wait_seconds", "id": "w1", "fields": { "SECONDS": 1 },
-          "next": { "block": {
-            "type": "rgb_led_preset_color", "id": "c2",
-            "fields": { "VAR": { "id": "v_led1" }, "COLOR": "BLUE" }
-          }}
-        }}
-      }}
-    }]
-  },
-  "variables": [{ "name": "led1", "id": "v_led1" }]
-}
-\`\`\`
-Key: rgb_led_setup, rgb_led_preset_color(RED), and rgb_led_preset_color(BLUE) ALL use VAR id "v_led1". Only 1 variable in the array.
-
-## COMMON MISTAKES — AVOID THESE
-1. ❌ Creating separate variables (i, j, k, m, n...) for each action block. Fix: reuse the setup variable.
-2. ❌ Using single-letter variable names. Fix: use "led1", "sensor1", etc.
-3. ❌ Declaring 8 variables when only 1 device exists. Fix: 1 device = 1 variable.
-4. ❌ Using wait_seconds with an input block. Fix: it's a FIELD: "fields": {"SECONDS": 2}.
-5. ❌ Inventing block types that don't exist. Fix: only use blocks from the catalog above.
-6. ❌ Leaving controls_repeat_ext TIMES empty (produces "repeat 0 times"). Fix: always connect a math_number block to TIMES.
-7. ❌ Leaving controls_for FROM/TO/BY empty. Fix: always connect math_number blocks to these inputs.
-8. ❌ Using controls_if with IF1/DO1 or ELSE inputs without "extraState". Fix: add "extraState": {"elseIfCount": N, "hasElse": true/false} to the block.
-
-## Example — Digital Pin
-User: "Turn on pin 5, wait 2 seconds, then turn it off"
-Response:
-\`\`\`json
-{
-  "blocks": {
-    "languageVersion": 0,
-    "blocks": [{
-      "type": "esp32_set_pin_on",
-      "id": "a1",
-      "x": 50, "y": 50,
-      "inputs": {
-        "PIN": {
-          "block": {
-            "type": "esp32_gpio_pin",
-            "id": "a2",
-            "fields": { "PIN": "5" }
-          }
-        }
-      },
-      "next": {
-        "block": {
-          "type": "wait_seconds",
-          "id": "a3",
-          "fields": { "SECONDS": 2 },
-          "next": {
-            "block": {
-              "type": "esp32_set_pin_off",
-              "id": "a4",
-              "inputs": {
-                "PIN": {
-                  "block": {
-                    "type": "esp32_gpio_pin",
-                    "id": "a5",
-                    "fields": { "PIN": "5" }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }]
-  }
-}
-\`\`\`
-
-## Instructions
-- For questions, explanations, or conversation: respond naturally in text.
-- When creating or editing a program: include a \`\`\`json code block with workspace JSON, plus a short explanation.
-- Use sensible default values for pins and parameters.
-- Wrap sequences in proper next chains.
-- Always declare variables used by variable fields.
-- Keep explanations concise (2-3 sentences).
-- REMEMBER: 1 setup block = 1 variable. All action blocks for that device share the SAME variable id. Never create extra variables.`;
+## Key Rules
+- For hardware blocks with VAR: always use the same var name as the setup block (e.g., "led1" everywhere).
+- Pin inputs: just use the pin number (e.g., 27). The compiler creates the proper pin block.
+- Number inputs: just use a literal number. The compiler wraps it in math_number.
+- Expression inputs: use a nested block object for complex expressions (e.g., math_arithmetic).
+- Variable references in expressions: use the variable name as a string (e.g., "intensity").
+- Do NOT invent block types. Only use blocks from the catalog above.
+- Keep programs clean and well-structured.`;
 }
