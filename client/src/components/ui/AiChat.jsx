@@ -224,10 +224,40 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
 
     try {
       const currentCode = generatedCode?.trim() || null;
-      const { text: responseText, toolCalls } = await currentBackend().sendMessage(text, currentCode);
 
-      // Show text response if any
-      if (responseText) {
+      // For Ollama, use streaming to show partial text
+      let streamMsgIndex = null;
+      const streamOpts = {};
+      if (backend === 'ollama') {
+        streamOpts.onToken = (token) => {
+          setMessages(prev => {
+            if (streamMsgIndex === null) {
+              streamMsgIndex = prev.length;
+              return [...prev, { role: 'assistant', text: token, streaming: true }];
+            }
+            const updated = [...prev];
+            updated[streamMsgIndex] = { ...updated[streamMsgIndex], text: updated[streamMsgIndex].text + token };
+            return updated;
+          });
+        };
+      }
+
+      const { text: responseText, toolCalls } = await currentBackend().sendMessage(text, currentCode, streamOpts);
+
+      // Replace streaming message with final parsed text (strips JSON blocks)
+      if (streamMsgIndex !== null) {
+        setMessages(prev => {
+          const updated = [...prev];
+          if (responseText) {
+            updated[streamMsgIndex] = { role: 'assistant', text: responseText };
+          } else {
+            // Remove the streaming placeholder if final text is empty (all was JSON)
+            updated.splice(streamMsgIndex, 1);
+          }
+          return updated;
+        });
+      } else if (responseText) {
+        // Non-streaming (Gemini): show text response
         setMessages(prev => [...prev, { role: 'assistant', text: responseText }]);
       }
 

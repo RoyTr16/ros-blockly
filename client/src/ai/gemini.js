@@ -96,7 +96,7 @@ function parseResponse(parts) {
 }
 
 // Send a message and get back { text, toolCalls }
-export async function sendMessage(userMessage, currentWorkspaceCode = null) {
+export async function sendMessage(userMessage, currentWorkspaceCode = null, _opts = {}) {
   if (!apiKey) throw new Error('Gemini not initialized. Please set your API key.');
 
   let fullMessage = userMessage;

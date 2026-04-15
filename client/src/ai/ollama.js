@@ -58,7 +58,8 @@ function extractDSL(text) {
 }
 
 // Send a message and return { text, toolCalls } (same interface as gemini.js)
-export async function sendMessage(userMessage, currentWorkspaceCode = null) {
+// Supports streaming: if onToken callback is provided, it receives partial text chunks.
+export async function sendMessage(userMessage, currentWorkspaceCode = null, { onToken } = {}) {
   if (!ollamaUrl) throw new Error('Ollama not initialized. Set the Ollama URL.');
 
   let fullMessage = userMessage;
@@ -75,14 +76,14 @@ export async function sendMessage(userMessage, currentWorkspaceCode = null) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model,
-      stream: false,
+      stream: true,
       messages: [
         { role: 'system', content: systemPrompt },
         ...chatHistory,
       ],
       options: {
         temperature: 0.2,
-        num_predict: 8192,
+        num_predict: 4096,
       },
     }),
   });
@@ -92,8 +93,27 @@ export async function sendMessage(userMessage, currentWorkspaceCode = null) {
     throw new Error(err.error || `Ollama API error ${res.status}`);
   }
 
-  const data = await res.json();
-  const content = data.message?.content || '';
+  // Read the streaming response
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let content = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const chunk = decoder.decode(value, { stream: true });
+    // Each line is a JSON object
+    for (const line of chunk.split('\n')) {
+      if (!line.trim()) continue;
+      try {
+        const obj = JSON.parse(line);
+        if (obj.message?.content) {
+          content += obj.message.content;
+          if (onToken) onToken(obj.message.content);
+        }
+      } catch { /* partial JSON, skip */ }
+    }
+  }
 
   chatHistory.push({ role: 'assistant', content });
 
@@ -104,7 +124,6 @@ export async function sendMessage(userMessage, currentWorkspaceCode = null) {
   if (dsl) {
     // Determine if it's a create or modify based on structure
     if (Array.isArray(dsl)) {
-      // It's a blocks array for create_program
       toolCalls.push({ name: 'create_program', args: { blocks: dsl } });
     } else if (dsl.blocks) {
       toolCalls.push({ name: 'create_program', args: { blocks: dsl.blocks } });
