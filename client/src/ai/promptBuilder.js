@@ -4,11 +4,12 @@
 
 import { getLoadedPackages } from '../packages/PackageLoader';
 
-// Lightweight block description: just type + tooltip
+// Lightweight block description: just type + display name + tooltip
 function describeBlockBrief(blockDef) {
   const def = blockDef.definition;
   const tooltip = blockDef.ai_description || def.tooltip || def.message0 || '';
-  return `  - **${blockDef.type}**: ${tooltip}`;
+  const name = blockDef.display_name || '';
+  return `  - **${blockDef.type}**${name ? ` ("${name}")` : ''}: ${tooltip}`;
 }
 
 // Full DSL description with all fields/inputs
@@ -162,7 +163,17 @@ export function buildSystemPrompt(mode = 'gemini') {
   const responseInstructions = mode === 'ollama'
     ? `## How to Respond
 - Format all explanations using **Markdown**: use headings, bold, bullet lists, and \`inline code\` for block names.
-- For questions, explanations, greetings, or "what does this do?": respond with Markdown TEXT only. Do NOT include any \`\`\`json code blocks.
+- **CRITICAL**: NEVER use technical block type names in explanations. Always use the human-friendly display name shown in quotes next to each block in the catalog.
+  - Say "**Setup Ultrasonic Sensor**" NOT "esp32_setup_ultrasonic"
+  - Say "**Set Pin ON**" / "**Set Pin OFF**" NOT "esp32_set_pin_on" / "esp32_set_pin_off"
+  - Say "**Forever Loop**" NOT "forever"
+  - Say "**If/Else**" NOT "controls_if"
+  - Say "**Compare**" NOT "logic_compare"
+  - Say "**Print to Console**" NOT "utilities_print"
+  - Say "**Wait**" NOT "wait_seconds"
+  - Say "**Number**" NOT "math_number"
+- When explaining a program, use the **actual variable names** from the program DSL context. Refer to variables with backticks and describe what they represent, e.g., "the distance stored in \`dist\`".
+- For questions, explanations, greetings, or "what does this do?": respond with Markdown TEXT only. Do NOT include any \`\`\`json code blocks. Do NOT include "I'll use:" block lists.
 - When the user asks to **create or modify** a program: first list the block types you plan to use, then output the full program as a \`\`\`json code block.
 - **IMPORTANT**: Always include a Markdown explanation BEFORE the JSON code block. Describe what the program does in 2-3 sentences.
 - If the user asks what a program does, describe it in Markdown. Do NOT regenerate it as JSON.
@@ -175,6 +186,15 @@ When creating or modifying a program, first list which block types you will use:
 Then the system may inject DSL syntax for those blocks. After that, output the full program.`
     : `## How to Respond
 - Format all explanations using **Markdown**: use headings, bold, bullet lists, and \`inline code\` for block names.
+- **CRITICAL**: NEVER use technical block type names in explanations. Always use the human-friendly display name shown in quotes next to each block in the catalog.
+  - Say "**Setup Ultrasonic Sensor**" NOT "esp32_setup_ultrasonic"
+  - Say "**Set Pin ON**" / "**Set Pin OFF**" NOT "esp32_set_pin_on" / "esp32_set_pin_off"
+  - Say "**Forever Loop**" NOT "forever"
+  - Say "**If/Else**" NOT "controls_if"
+  - Say "**Compare**" NOT "logic_compare"
+  - Say "**Print to Console**" NOT "utilities_print"
+  - Say "**Wait**" NOT "wait_seconds"
+- When explaining a program, use the **actual variable names** from the program DSL context. Refer to variables with backticks and describe what they represent, e.g., "the distance stored in \`dist\`".
 - For questions, explanations, greetings: respond with Markdown TEXT only. Do NOT call any tools.
 - When the user asks to create a NEW program: call the **get_block_details** tool first if you need DSL syntax, then call the **create_program** tool.
 - When the user asks to MODIFY the existing program: call **get_block_details** if needed, then call **modify_program** or **create_program** (for large changes).
@@ -278,36 +298,36 @@ ${blockCatalog}
 
 ## Built-in Control Blocks
 ### Loops
-  - **forever**: Infinite loop
-  - **controls_repeat_ext**: Repeat N times
-  - **controls_for**: For loop with counter variable
-  - **controls_whileUntil**: While/until condition loop
+  - **forever** ("Forever Loop"): Infinite loop
+  - **controls_repeat_ext** ("Repeat N Times"): Repeat N times
+  - **controls_for** ("For Loop"): For loop with counter variable
+  - **controls_whileUntil** ("While/Until Loop"): While/until condition loop
 
 ### Logic
-  - **controls_if**: If/else-if/else branching
-  - **logic_compare**: Compare two values (EQ, NEQ, LT, LTE, GT, GTE)
-  - **logic_operation**: AND/OR logic
-  - **logic_boolean**: True/false constant
+  - **controls_if** ("If/Else"): If/else-if/else branching
+  - **logic_compare** ("Compare"): Compare two values (EQ, NEQ, LT, LTE, GT, GTE)
+  - **logic_operation** ("AND/OR"): AND/OR logic
+  - **logic_boolean** ("True/False"): True/false constant
 
 ### Math
-  - **math_number**: Literal number
-  - **math_arithmetic**: Arithmetic (ADD, MINUS, MULTIPLY, DIVIDE, POWER)
-  - **math_modulo**: Modulo operation
+  - **math_number** ("Number"): Literal number
+  - **math_arithmetic** ("Math Operation"): Arithmetic (ADD, MINUS, MULTIPLY, DIVIDE, POWER)
+  - **math_modulo** ("Modulo"): Modulo operation
 
 ### Variables
-  - **variables_set**: Set a variable value
-  - **variables_get**: Get a variable value
+  - **variables_set** ("Set Variable"): Set a variable value
+  - **variables_get** ("Get Variable"): Get a variable value
   - Variable references in expressions: just use the variable name as a string (e.g., "led1")
 
 ### Functions
-  - **procedures_defnoreturn**: Define a function
-  - **procedures_callnoreturn**: Call a function
+  - **procedures_defnoreturn** ("Define Function"): Define a function
+  - **procedures_callnoreturn** ("Call Function"): Call a function
 
 ### Utilities
-  - **wait_seconds**: Delay execution
-  - **utilities_print**: Log text and values
-  - **utilities_elapsed_time**: Get elapsed seconds
-  - **controls_flow_statements**: Break/continue
+  - **wait_seconds** ("Wait"): Delay execution
+  - **utilities_print** ("Print to Console"): Log text and values
+  - **utilities_elapsed_time** ("Elapsed Time"): Get elapsed seconds
+  - **controls_flow_statements** ("Break/Continue"): Break/continue
 
 ${exampleSection}
 

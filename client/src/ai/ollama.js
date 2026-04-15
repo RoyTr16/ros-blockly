@@ -131,11 +131,15 @@ export async function sendMessage(userMessage, currentWorkspaceCode = null, _opt
     throw new Error(`Cannot reach Ollama at ${ollamaUrl}. Make sure the Ollama container is running and CORS is enabled (OLLAMA_ORIGINS=*).`);
   }
 
+  // Detect question-only messages early — suppress program generation
+  const questionOnly = /^\s*(what|how|why|explain|describe|tell me about)\b/i.test(userMessage)
+    && !/\b(and |then |but |also |change|make|fix|add|create|build|modify|update|set|remove)\b/i.test(userMessage);
+
   // Phase 1: Check if the model produced a program directly
-  let dsl = extractDSL(content);
+  let dsl = questionOnly ? null : extractDSL(content);
 
   // If no DSL yet but the model mentioned block types → inject syntax + ask for program (Phase 2)
-  if (!dsl) {
+  if (!dsl && !questionOnly) {
     const requestedBlocks = extractRequestedBlocks(content);
     if (requestedBlocks.length > 0) {
       console.log('[Ollama] Phase 2: injecting DSL syntax for:', requestedBlocks);
@@ -177,9 +181,6 @@ export async function sendMessage(userMessage, currentWorkspaceCode = null, _opt
 
   // Build tool calls from DSL
   const toolCalls = [];
-  const questionOnly = /^\s*(what|how|why|explain|describe|tell me about)\b/i.test(userMessage)
-    && !/\b(and |then |but |also |change|make|fix|add|create|build|modify|update|set|remove)\b/i.test(userMessage);
-
   if (dsl && !questionOnly) {
     if (Array.isArray(dsl)) {
       toolCalls.push({ name: 'create_program', args: { blocks: dsl } });
@@ -190,6 +191,10 @@ export async function sendMessage(userMessage, currentWorkspaceCode = null, _opt
     }
   }
 
-  const explanation = content.replace(/```(?:json)?\s*\n?[\s\S]*?```/g, '').trim();
+  // Clean up explanation: remove JSON code blocks and "I'll use:" block selection text
+  const explanation = content
+    .replace(/```(?:json)?\s*\n?[\s\S]*?```/g, '')
+    .replace(/I'll use[:\s]+[\w\s,_]+$/im, '')
+    .trim();
   return { text: explanation, toolCalls };
 }

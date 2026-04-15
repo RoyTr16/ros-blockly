@@ -15,6 +15,7 @@
   "blocks": [
     {
       "type": "esp32_gpio_pin",
+      "display_name": "GPIO Pin Selector",
       "definition": {
         "message0": "%1",
         "args0": [
@@ -43,6 +44,7 @@
     },
     {
       "type": "esp32_set_pin_on",
+      "display_name": "Set Pin ON",
       "ai_description": "Turn a single GPIO pin HIGH (3.3V). Use for blinking LEDs, activating relays, or any digital output.",
       "definition": {
         "message0": "Set Pin %1 ON",
@@ -65,6 +67,7 @@
     },
     {
       "type": "esp32_set_pin_off",
+      "display_name": "Set Pin OFF",
       "ai_description": "Turn a single GPIO pin LOW (0V). Use together with esp32_set_pin_on to blink LEDs.",
       "definition": {
         "message0": "Set Pin %1 OFF",
@@ -87,6 +90,7 @@
     },
     {
       "type": "esp32_setup_ultrasonic",
+      "display_name": "Setup Ultrasonic Sensor",
       "ai_description": "Setup HC-SR04 ultrasonic sensor. Distance readings in cm are continuously stored in the chosen variable.",
       "definition": {
         "message0": "Setup Ultrasonic Sensor → %1",
@@ -117,6 +121,7 @@
     },
     {
       "type": "rgb_led_setup",
+      "display_name": "Setup RGB LED",
       "ai_description": "Setup a 3-pin RGB LED. Only use when the user wants color control with separate R/G/B channels.",
       "definition": {
         "message0": "Setup RGB LED → %1",
@@ -152,6 +157,7 @@
     },
     {
       "type": "rgb_led_set_color",
+      "display_name": "Set RGB Color",
       "definition": {
         "message0": "Set %1 color R %2 G %3 B %4",
         "args0": [
@@ -178,6 +184,7 @@
     },
     {
       "type": "rgb_led_preset_color",
+      "display_name": "Set Preset Color",
       "definition": {
         "message0": "Set %1 to %2",
         "args0": [
@@ -210,6 +217,7 @@
     },
     {
       "type": "rgb_led_off",
+      "display_name": "Turn Off RGB LED",
       "definition": {
         "message0": "Turn off %1",
         "args0": [
