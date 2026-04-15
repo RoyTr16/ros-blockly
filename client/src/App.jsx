@@ -8,13 +8,15 @@ import useRobotControl from './hooks/useRobotControl';
 import './App.css';
 
 const AppContent = () => {
-  const { generatedCode, setGeneratedCode, runCode, stopExecution, running, resetRobot } = useRobotControl();
+  const { generatedCode, setGeneratedCode, setCodeGroups, setPreamble, runCode, stopExecution, running, resetRobot } = useRobotControl();
   const blocklyRef = useRef(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [previewActive, setPreviewActive] = useState(false);
 
-  const handleCodeChange = (code) => {
+  const handleCodeChange = (code, groups, preamble) => {
     setGeneratedCode(code);
+    if (groups) setCodeGroups(groups);
+    if (preamble !== undefined) setPreamble(preamble);
   };
 
   const handleSave = useCallback(() => blocklyRef.current?.save(), []);

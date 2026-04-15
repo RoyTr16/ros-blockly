@@ -49,11 +49,15 @@ function makeValueBlock(value, check) {
 // Compile a single DSL block into a Blockly block object
 // DSL format: { type, var?, fields?, inputs?, body/do?, [custom fields directly] }
 function compileBlock(dsl, variables, blockDefs) {
+  if (!dsl || typeof dsl !== 'object' || !dsl.type) {
+    console.warn('[DSL Compiler] Block missing type:', JSON.stringify(dsl));
+    return { type: 'math_number', id: uid(), fields: { NUM: 0 } };
+  }
   const blockType = dsl.type;
   const block = { type: blockType, id: uid() };
 
   // Determine which keys are fields, inputs, and special
-  const specialKeys = new Set(['type', 'var', 'body', 'do', 'then', 'else_if', 'else', 'condition', 'if', 'value', 'num', 'steps', 'function_name', 'args', 'joints']);
+  const specialKeys = new Set(['type', 'var', 'body', 'do', 'then', 'else_if', 'else', 'condition', 'if', 'value', 'num', 'steps', 'function_name', 'args', 'joints', 'graph_var', 'x_value', 'y_value', 'ifTrue', 'ifFalse', 'thenDo', 'elseDo']);
   const def = blockDefs[blockType];
 
   // --- Handle built-in blocks specially ---
@@ -132,21 +136,48 @@ function compileBlock(dsl, variables, blockDefs) {
   }
 
   // controls_if: { type, if0, do0, if1?, do1?, else? }
-  // Aliases: condition/then/else, if/do/else
+  // Aliases: condition/then/else, if/do/else, ifTrue/ifFalse
   if (blockType === 'controls_if') {
     block.inputs = {};
     let elseIfCount = 0;
+
+    // Handle ifTrue/ifFalse alias: ifTrue = [condition, ...body], ifFalse = [...body]
+    // Also handle ifTrue + thenDo/elseDo variant: ifTrue = [condition], thenDo = [...body], elseDo = [...else]
+    if (dsl.ifTrue && Array.isArray(dsl.ifTrue)) {
+      let cond, body;
+      if (dsl.thenDo) {
+        // ifTrue is just the condition (wrapped in array), body is in thenDo
+        cond = dsl.ifTrue[0];
+        body = dsl.thenDo;
+      } else {
+        // ifTrue = [condition, ...bodyBlocks]
+        [cond, ...body] = dsl.ifTrue;
+      }
+      if (cond) block.inputs.IF0 = { block: compileBlock(cond, variables, blockDefs) };
+      if (body && body.length) block.inputs.DO0 = { block: compileChain(body, variables, blockDefs) };
+      const elseBody = dsl.elseDo || dsl.ifFalse;
+      const hasElse = !!(elseBody && elseBody.length);
+      if (hasElse) {
+        block.inputs.ELSE = { block: compileChain(elseBody, variables, blockDefs) };
+      }
+      if (hasElse) {
+        block.extraState = { elseIfCount: 0, hasElse };
+      }
+      return block;
+    }
+
     for (let i = 0; i < 20; i++) {
       const cond = dsl[`if${i}`] || (i === 0 ? (dsl.condition || dsl.if) : null);
-      const body = dsl[`do${i}`] || (i === 0 ? (dsl.then || dsl.body) : null);
+      const body = dsl[`do${i}`] || (i === 0 ? (dsl.thenDo || dsl.then || dsl.body) : null);
       if (!cond && i > 0) break;
       if (cond) block.inputs[`IF${i}`] = { block: compileBlock(cond, variables, blockDefs) };
       if (body) block.inputs[`DO${i}`] = { block: compileChain(body, variables, blockDefs) };
       if (i > 0) elseIfCount++;
     }
-    const hasElse = !!dsl.else;
+    const elseBlocks = dsl.elseDo || dsl.else;
+    const hasElse = !!elseBlocks;
     if (hasElse) {
-      block.inputs.ELSE = { block: compileChain(dsl.else, variables, blockDefs) };
+      block.inputs.ELSE = { block: compileChain(elseBlocks, variables, blockDefs) };
     }
     if (elseIfCount > 0 || hasElse) {
       block.extraState = { elseIfCount, hasElse };
@@ -269,7 +300,8 @@ function compileBlock(dsl, variables, blockDefs) {
 
   // wait_seconds: { type, seconds }
   if (blockType === 'wait_seconds') {
-    block.fields = { SECONDS: dsl.seconds ?? 1 };
+    const sec = dsl.seconds ?? 1;
+    block.inputs = { SECONDS: { block: compileExpression(sec, variables, blockDefs) } };
     return block;
   }
 
@@ -290,6 +322,45 @@ function compileBlock(dsl, variables, blockDefs) {
   // controls_flow_statements: { type, flow } (break/continue)
   if (blockType === 'controls_flow_statements') {
     block.fields = { FLOW: dsl.flow || 'BREAK' };
+    return block;
+  }
+
+  // utilities_setup_graph: { type, var, x_label, y_label, color, style }
+  if (blockType === 'utilities_setup_graph') {
+    const varName = dsl.var || 'myGraph';
+    ensureVariable(variables, varName);
+    block.fields = {
+      VAR: { id: variables[varName], name: varName, type: '' },
+      X_LABEL: dsl.x_label ?? 'Time (s)',
+      Y_LABEL: dsl.y_label ?? 'Value',
+      COLOR: dsl.color ?? '#4285f4',
+      STYLE: dsl.style ?? 'line',
+    };
+    return block;
+  }
+
+  // utilities_plot_point: { type, var, x, y }
+  // Aliases: graph_var→var, x_value→x, y_value→y
+  if (blockType === 'utilities_plot_point') {
+    const varName = dsl.var || dsl.graph_var || 'myGraph';
+    ensureVariable(variables, varName);
+    block.fields = { VAR: { id: variables[varName], name: varName, type: '' } };
+    block.inputs = {};
+    const xVal = dsl.x ?? dsl.x_value;
+    const yVal = dsl.y ?? dsl.y_value;
+    if (xVal != null) block.inputs.X = { block: compileExpression(xVal, variables, blockDefs) };
+    if (yVal != null) block.inputs.Y = { block: compileExpression(yVal, variables, blockDefs) };
+    return block;
+  }
+
+  // utilities_graph_viewer: { type, var }
+  if (blockType === 'utilities_graph_viewer') {
+    const varName = dsl.var || 'myGraph';
+    ensureVariable(variables, varName);
+    block.fields = {
+      VAR: { id: variables[varName], name: varName, type: '' },
+      VISIBLE: dsl.visible === false ? 'FALSE' : 'TRUE',
+    };
     return block;
   }
 
@@ -390,6 +461,10 @@ function compileExpression(expr, variables, blockDefs) {
     return { type: 'logic_boolean', id: uid(), fields: { BOOL: expr ? 'TRUE' : 'FALSE' } };
   }
   if (typeof expr === 'string') {
+    // Recognize common block aliases used as string shortcuts
+    if (expr === 'elapsed_time' || expr === 'time_elapsed') {
+      return { type: 'utilities_elapsed_time', id: uid() };
+    }
     // Treat as variable reference
     ensureVariable(variables, expr);
     return { type: 'variables_get', id: uid(), fields: { VAR: { id: variables[expr], name: expr, type: '' } } };
@@ -409,12 +484,17 @@ const EXPRESSION_BLOCKS = new Set([
   'variables_get', 'utilities_elapsed_time',
 ]);
 
+// Block types that are standalone (no previous/next connections, placed as separate top-level blocks)
+const STANDALONE_BLOCKS = new Set([
+  'utilities_graph_viewer',
+]);
+
 function compileChain(blocks, variables, blockDefs) {
   if (!Array.isArray(blocks)) blocks = [blocks];
   if (blocks.length === 0) return null;
 
-  // Filter out expression-only blocks that can't be chained as statements
-  const stmtBlocks = blocks.filter(b => !EXPRESSION_BLOCKS.has(b.type));
+  // Filter out expression-only, standalone blocks, and invalid entries
+  const stmtBlocks = blocks.filter(b => b && typeof b === 'object' && b.type && !EXPRESSION_BLOCKS.has(b.type) && !STANDALONE_BLOCKS.has(b.type));
   if (stmtBlocks.length === 0) return null;
 
   const compiled = stmtBlocks.map(b => compileBlock(b, variables, blockDefs));
@@ -444,8 +524,23 @@ export function compileDSL(program) {
   let y = 50;
 
   for (const chain of program.blocks) {
+    if (!chain) continue;
     const blocks = Array.isArray(chain) ? chain : [chain];
-    const first = compileChain(blocks, variables, blockDefs);
+    // Filter out invalid entries
+    const validBlocks = blocks.filter(b => b && typeof b === 'object' && b.type);
+    if (validBlocks.length === 0) continue;
+
+    // Extract standalone blocks and place them separately
+    const standaloneInChain = validBlocks.filter(b => STANDALONE_BLOCKS.has(b.type));
+    for (const sb of standaloneInChain) {
+      const compiled = compileBlock(sb, variables, blockDefs);
+      compiled.x = 400;
+      compiled.y = y;
+      y += 80;
+      topLevelBlocks.push(compiled);
+    }
+
+    const first = compileChain(validBlocks, variables, blockDefs);
     if (first) {
       first.x = 50;
       first.y = y;

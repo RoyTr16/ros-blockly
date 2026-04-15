@@ -122,8 +122,31 @@ const BlocklyComponent = forwardRef((props, ref) => {
 
     // Listener to generate code on change + autosave
     workspace.current.addChangeListener(() => {
+        // Generate full code for display panel
         const code = javascriptGenerator.workspaceToCode(workspace.current);
-        props.onCodeChange(code);
+
+        // Generate per-group code for concurrent execution
+        // We must re-init the generator because workspaceToCode() deletes nameDB_ and definitions_
+        // This gives us a fresh, consistent name database for all groups
+        javascriptGenerator.init(workspace.current);
+        const topBlocks = workspace.current.getTopBlocks(true);
+        const codeGroups = [];
+        for (const block of topBlocks) {
+          // Skip blocks with output (expression blocks) or no connections (standalone visual blocks)
+          if (block.outputConnection) continue;
+          if (!block.previousConnection && !block.nextConnection) continue;
+          const groupCode = javascriptGenerator.blockToCode(block);
+          if (typeof groupCode === 'string' && groupCode.trim()) {
+            codeGroups.push(groupCode);
+          } else if (Array.isArray(groupCode) && groupCode[0]?.trim()) {
+            codeGroups.push(groupCode[0]);
+          }
+        }
+        // Read definitions_ (variable declarations, function defs) BEFORE finish() deletes them
+        const preamble = Object.values(javascriptGenerator.definitions_ || {}).join('\n\n');
+
+        console.log(`[BlocklyComponent] Top blocks: ${topBlocks.length}, Code groups: ${codeGroups.length}, Preamble: ${preamble.length} chars`);
+        props.onCodeChange(code, codeGroups, preamble);
         try {
           const state = Blockly.serialization.workspaces.save(workspace.current);
           localStorage.setItem('blockly_autosave', JSON.stringify(state));

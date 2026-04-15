@@ -243,7 +243,8 @@ function decompileBlock(block, blockDefs, varMap) {
 
   // wait_seconds
   if (t === 'wait_seconds') {
-    return { type: 'wait_seconds', seconds: block.fields?.SECONDS ?? 1 };
+    const secBlock = block.inputs?.SECONDS?.block;
+    return { type: 'wait_seconds', seconds: secBlock ? decompileExpr(secBlock, blockDefs, varMap) : 1 };
   }
 
   // utilities_print
@@ -256,6 +257,31 @@ function decompileBlock(block, blockDefs, varMap) {
   // controls_flow_statements
   if (t === 'controls_flow_statements') {
     return { type: 'controls_flow_statements', flow: block.fields?.FLOW || 'BREAK' };
+  }
+
+  // utilities_setup_graph
+  if (t === 'utilities_setup_graph') {
+    return {
+      type: 'utilities_setup_graph',
+      var: resolveVar(block.fields?.VAR, varMap, 'myGraph'),
+      x_label: block.fields?.X_LABEL ?? 'Time (s)',
+      y_label: block.fields?.Y_LABEL ?? 'Value',
+      color: block.fields?.COLOR ?? '#4285f4',
+      style: block.fields?.STYLE ?? 'line',
+    };
+  }
+
+  // utilities_plot_point
+  if (t === 'utilities_plot_point') {
+    const dsl = { type: 'utilities_plot_point', var: resolveVar(block.fields?.VAR, varMap, 'myGraph') };
+    if (block.inputs?.X?.block) dsl.x = decompileExpr(block.inputs.X.block, blockDefs, varMap);
+    if (block.inputs?.Y?.block) dsl.y = decompileExpr(block.inputs.Y.block, blockDefs, varMap);
+    return dsl;
+  }
+
+  // utilities_graph_viewer
+  if (t === 'utilities_graph_viewer') {
+    return { type: 'utilities_graph_viewer', var: resolveVar(block.fields?.VAR, varMap, 'myGraph') };
   }
 
   // --- Package-defined blocks (generic handler) ---

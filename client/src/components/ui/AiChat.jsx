@@ -14,7 +14,7 @@ const OLLAMA_MODEL_STORAGE = 'ollama_model';
 
 const ENV_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
 const DEFAULT_OLLAMA_URL = 'http://localhost:11434';
-const DEFAULT_OLLAMA_MODEL = import.meta.env.VITE_OLLAMA_MODEL || 'qwen2.5-coder:7b';
+const DEFAULT_OLLAMA_MODEL = import.meta.env.VITE_OLLAMA_MODEL || 'qwen3:8b';
 
 const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
 
@@ -133,12 +133,66 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
 
     const modified = JSON.parse(JSON.stringify(json)); // deep clone
 
+    // Helper: compile a DSL block into Blockly JSON (reuse dslCompiler)
+    const compileSingleBlock = (dslBlock) => {
+      try {
+        const result = compileDSL({ blocks: [[dslBlock]] });
+        return result?.blocks?.blocks?.[0] || null;
+      } catch { return null; }
+    };
+
+    // Block types that have no previous/next connections — must be placed as standalone top-level
+    const STANDALONE_TYPES = new Set(['utilities_graph_viewer']);
+
     for (const op of operations) {
+      // --- "insert" action: add a block (or standalone block) at chain/position ---
+      if (op.action === 'insert' || op.action === 'add_block') {
+        const blockDsl = op.block || op.blocks?.[0];
+        if (!blockDsl) return { error: 'insert operation missing "block" field.' };
+        const compiled = compileSingleBlock(blockDsl);
+        if (!compiled) return { error: `Failed to compile block: ${JSON.stringify(blockDsl)}` };
+
+        const isStandalone = STANDALONE_TYPES.has(blockDsl.type);
+        const chainIdx = op.chain ?? -1;
+
+        if (isStandalone || chainIdx < 0 || chainIdx >= modified.blocks.blocks.length) {
+          // Add as new top-level block (standalone or invalid chain)
+          const lastBlock = modified.blocks.blocks[modified.blocks.blocks.length - 1];
+          compiled.x = (lastBlock?.x ?? 50) + 350;
+          compiled.y = lastBlock?.y ?? 50;
+          modified.blocks.blocks.push(compiled);
+        } else {
+          // Insert into existing chain at position
+          const pos = op.position ?? -1;
+          const chainRoot = modified.blocks.blocks[chainIdx];
+          if (pos <= 0) {
+            // Insert before chain root
+            compiled.next = { block: chainRoot };
+            compiled.x = chainRoot.x;
+            compiled.y = chainRoot.y;
+            delete chainRoot.x;
+            delete chainRoot.y;
+            modified.blocks.blocks[chainIdx] = compiled;
+          } else {
+            // Walk to position and insert
+            let current = chainRoot;
+            for (let i = 0; i < pos - 1 && current?.next?.block; i++) {
+              current = current.next.block;
+            }
+            const afterBlock = current.next || null;
+            compiled.next = afterBlock;
+            current.next = { block: compiled };
+          }
+        }
+        continue;
+      }
+
+      // --- block_type-based operations ---
       let found = false;
       let occurrence = op.occurrence ?? 0;
       let count = 0;
 
-      const walk = (block) => {
+      const walk = (block, parent, parentKey) => {
         if (!block || found) return;
         if (block.type === op.block_type) {
           if (count === occurrence) {
@@ -153,19 +207,36 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
             } else if (op.action === 'remove_block') {
               block._remove = true;
               found = true;
+            } else if (op.action === 'add_after') {
+              // Insert blocks after this one in the chain
+              const newBlocks = op.blocks || (op.block ? [op.block] : []);
+              if (newBlocks.length > 0) {
+                // Compile the DSL blocks into a chain
+                const result = compileDSL({ blocks: [newBlocks] });
+                const compiledChain = result?.blocks?.blocks?.[0];
+                if (compiledChain) {
+                  // Find the tail of the compiled chain
+                  let tail = compiledChain;
+                  while (tail.next?.block) tail = tail.next.block;
+                  // Link: compiled chain tail → block's original next
+                  tail.next = block.next || null;
+                  block.next = { block: compiledChain };
+                }
+              }
+              found = true;
             }
           }
           count++;
         }
-        if (block.next?.block) walk(block.next.block);
+        if (block.next?.block) walk(block.next.block, block, 'next');
         if (block.inputs) {
           for (const inp of Object.values(block.inputs)) {
-            if (inp.block) walk(inp.block);
+            if (inp.block) walk(inp.block, block, 'input');
           }
         }
       };
 
-      modified.blocks.blocks.forEach(walk);
+      modified.blocks.blocks.forEach(b => walk(b, null, null));
       if (!found) return { error: `Could not find block "${op.block_type}" (occurrence ${occurrence}).` };
     }
 

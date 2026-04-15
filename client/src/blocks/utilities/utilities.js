@@ -78,13 +78,28 @@ class FieldEyeToggle extends Blockly.FieldImage {
 
 Blockly.fieldRegistry.register('field_eye_toggle', FieldEyeToggle);
 
+// --- Relax logic block output types so Boolean can connect to Number inputs ---
+// (e.g. "2 - (dist <= 30)" uses a comparison result as a number, valid in JS)
+['logic_compare', 'logic_operation', 'logic_negate'].forEach(type => {
+  const orig = Blockly.Blocks[type];
+  if (orig && orig.init) {
+    const origInit = orig.init;
+    Blockly.Blocks[type].init = function () {
+      origInit.call(this);
+      this.outputConnection?.setCheck(['Boolean', 'Number']);
+    };
+  }
+});
+
 // --- Wait Seconds block (core, used in Loops category) ---
 Blockly.Blocks['wait_seconds'] = {
   init: function () {
+    this.appendValueInput('SECONDS')
+      .setCheck('Number')
+      .appendField('Wait');
     this.appendDummyInput()
-      .appendField('Wait')
-      .appendField(new Blockly.FieldNumber(1, 0), 'SECONDS')
       .appendField('seconds');
+    this.setInputsInline(true);
     this.setPreviousStatement(true, null);
     this.setNextStatement(true, null);
     this.setColour(120);
@@ -93,7 +108,7 @@ Blockly.Blocks['wait_seconds'] = {
 };
 
 javascriptGenerator.forBlock['wait_seconds'] = function (block) {
-  const seconds = block.getFieldValue('SECONDS');
+  const seconds = javascriptGenerator.valueToCode(block, 'SECONDS', Order.ATOMIC) || '1';
   return `await wait(${seconds});\n`;
 };
 

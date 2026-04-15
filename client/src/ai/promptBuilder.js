@@ -122,10 +122,13 @@ export function getBlockDetails(blockTypes) {
     variables_get: '- **variables_get**: Get variable.\n  DSL: { type: "variables_get", var: "myVar" }',
     procedures_defnoreturn: '- **procedures_defnoreturn**: Define function.\n  DSL: { type: "procedures_defnoreturn", name: "doSomething", body: [...] }',
     procedures_callnoreturn: '- **procedures_callnoreturn**: Call function.\n  DSL: { type: "procedures_callnoreturn", name: "doSomething" }',
-    wait_seconds: '- **wait_seconds**: Delay.\n  DSL: { type: "wait_seconds", seconds: 2 }',
+    wait_seconds: '- **wait_seconds**: Delay.\n  DSL: { type: "wait_seconds", seconds: {expr} }\n  seconds can be a number or a variable reference like "myVar".',
     utilities_print: '- **utilities_print**: Log text.\n  DSL: { type: "utilities_print", text: "Value:", value: "myVar" }',
-    utilities_elapsed_time: '- **utilities_elapsed_time**: Get elapsed seconds.\n  DSL: { type: "utilities_elapsed_time" }',
+    utilities_elapsed_time: '- **utilities_elapsed_time**: Get elapsed seconds since program start.\n  DSL: { type: "utilities_elapsed_time" }\n  Use this as an expression, e.g. for graph X axis: "x": { type: "utilities_elapsed_time" } or shorthand "x": "elapsed_time"',
     controls_flow_statements: '- **controls_flow_statements**: Break/continue.\n  DSL: { type: "controls_flow_statements", flow: "BREAK" }',
+    utilities_setup_graph: '- **utilities_setup_graph**: Create a graph. The "var" field names the graph variable.\n  DSL: { type: "utilities_setup_graph", var: "distGraph", x_label: "Time (s)", y_label: "Distance (cm)", color: "#4285f4", style: "line" }\n  color: "#4285f4" (Blue), "#ea4335" (Red), "#34a853" (Green), "#fbbc05" (Orange), "#9334e6" (Purple), "#00bcd4" (Cyan), "#e91e63" (Pink)\n  style: "line" or "scatter"',
+    utilities_plot_point: '- **utilities_plot_point**: Add a data point to a graph. Use EXACTLY these keys: "var", "x", "y".\n  DSL: { type: "utilities_plot_point", var: "distGraph", x: { type: "utilities_elapsed_time" }, y: "dist" }\n  "var" must match the graph\'s var name. "x" and "y" are expressions (number, variable name, or nested block).',
+    utilities_graph_viewer: '- **utilities_graph_viewer**: Show/hide a live chart (visual only).\n  DSL: { type: "utilities_graph_viewer", var: "distGraph" }',
   };
 
   for (const bt of blockTypes) {
@@ -157,6 +160,7 @@ export function getAllBlockTypes() {
     'variables_set', 'variables_get',
     'procedures_defnoreturn', 'procedures_callnoreturn',
     'wait_seconds', 'utilities_print', 'utilities_elapsed_time', 'controls_flow_statements',
+    'utilities_setup_graph', 'utilities_plot_point', 'utilities_graph_viewer',
   );
   return types;
 }
@@ -177,17 +181,14 @@ export function buildSystemPrompt(mode = 'gemini') {
   - Say "**Wait**" NOT "wait_seconds"
   - Say "**Number**" NOT "math_number"
 - When explaining a program, use the **actual variable names** from the program DSL context. Refer to variables with backticks and describe what they represent, e.g., "the distance stored in \`dist\`".
-- For questions, explanations, greetings, or "what does this do?": respond with Markdown TEXT only. Do NOT include any \`\`\`json code blocks. Do NOT include "I'll use:" block lists.
-- When the user asks to **create or modify** a program: first list the block types you plan to use, then output the full program as a \`\`\`json code block.
-- **IMPORTANT**: Always include a Markdown explanation BEFORE the JSON code block. Describe what the program does in 2-3 sentences.
-- If the user asks what a program does, describe it in Markdown. Do NOT regenerate it as JSON.
-- The current program is provided in DSL format (the same JSON format you output). When modifying, use it as your starting point and apply only the requested changes.
-- When regenerating a program with changes, include ALL the original blocks and logic, not just the parts you changed. The output replaces the entire workspace.
-
-## Block Selection Phase
-When creating or modifying a program, first list which block types you will use:
-"I'll use: esp32_set_pin_on, esp32_set_pin_off, esp32_setup_ultrasonic, controls_if, forever, logic_compare, wait_seconds"
-Then the system may inject DSL syntax for those blocks. After that, output the full program.`
+- For questions, explanations, greetings, or "what does this do?": respond with Markdown TEXT only. Do NOT call any tools.
+- When the user asks to **create or modify** a program:
+  1. First call **get_block_details** with the block types you plan to use, to get exact DSL syntax.
+  2. Then call **create_program** (for new programs or large changes) or **modify_program** (for small changes) with the program DSL.
+- **IMPORTANT**: Always include a Markdown explanation alongside every tool call. Describe what the program does in 2-3 sentences.
+- If the user asks what a program does, describe it in Markdown. Do NOT call any tools.
+- The current program is provided in DSL format. When modifying, use it as your starting point and apply only the requested changes.
+- When regenerating a program with changes, include ALL the original blocks and logic, not just the parts you changed. The output replaces the entire workspace.`
     : `## How to Respond
 - Format all explanations using **Markdown**: use headings, bold, bullet lists, and \`inline code\` for block names.
 - **CRITICAL**: NEVER use technical block type names in explanations. Always use the human-friendly display name shown in quotes next to each block in the catalog.
@@ -205,49 +206,57 @@ Then the system may inject DSL syntax for those blocks. After that, output the f
 - **IMPORTANT**: Always include a Markdown explanation alongside every tool call.`;
 
   const exampleSection = mode === 'ollama'
-    ? `## Creating a Program
-Output the blocks array inside a \`\`\`json code block. The top level is an array of chains.
-Each chain is an array of sequential blocks. Separate chains for independent stacks.
+    ? `## create_program Tool
+The "blocks" parameter is a JSON **array** of block chains. Each chain is an array of block objects.
 
 ### Example — Blink a pin:
-\`\`\`json
-[
+create_program({ blocks: [
   [
-    { "type": "forever", "body": [
-      { "type": "esp32_set_pin_on", "pin": 14 },
-      { "type": "wait_seconds", "seconds": 0.5 },
-      { "type": "esp32_set_pin_off", "pin": 14 },
-      { "type": "wait_seconds", "seconds": 0.5 }
+    { type: "forever", body: [
+      { type: "esp32_set_pin_on", pin: 14 },
+      { type: "wait_seconds", seconds: 0.5 },
+      { type: "esp32_set_pin_off", pin: 14 },
+      { type: "wait_seconds", seconds: 0.5 }
     ]}
   ]
-]
-\`\`\`
+]})
 
 ### Example — Distance-based LED with math expressions:
-\`\`\`json
-[
+create_program({ blocks: [
   [
-    { "type": "rgb_led_setup", "var": "led1", "r_pin": 27, "g_pin": 14, "b_pin": 12 },
-    { "type": "esp32_setup_ultrasonic", "var": "dist", "trig_pin": 17, "echo_pin": 16 },
-    { "type": "forever", "body": [
-      { "type": "rgb_led_set_color", "var": "led1",
-        "red": { "type": "math_arithmetic", "op": "MINUS", "a": 255, "b": "dist" },
-        "green": 0,
-        "blue": "dist" },
-      { "type": "utilities_print", "text": "Distance:", "value": "dist" },
-      { "type": "wait_seconds", "seconds": 0.1 }
+    { type: "rgb_led_setup", var: "led1", r_pin: 27, g_pin: 14, b_pin: 12 },
+    { type: "esp32_setup_ultrasonic", var: "dist", trig_pin: 17, echo_pin: 16 },
+    { type: "forever", body: [
+      { type: "rgb_led_set_color", var: "led1",
+        red: { type: "math_arithmetic", op: "MINUS", a: 255, b: "dist" },
+        green: 0,
+        blue: "dist" },
+      { type: "utilities_print", text: "Distance:", value: "dist" },
+      { type: "wait_seconds", seconds: 0.1 }
     ]}
   ]
-]
-\`\`\`
-Note: For inputs that depend on variables, use the variable name as a string (e.g., "dist"). For math, use nested objects like { "type": "math_arithmetic", "op": "MINUS", "a": 255, "b": "dist" }.
+]})
+Note: For inputs that depend on variables, use the variable name as a string (e.g., "dist"). For math, use nested objects like { type: "math_arithmetic", op: "MINUS", a: 255, b: "dist" }.
+
+## modify_program Tool
+The "operations" parameter is a JSON **array** of operation objects.
+Use this for small changes. Each operation must have an "action" field. Operations:
+- **set_field**: { action: "set_field", block_type: "esp32_set_pin_on", field: "PIN", value: "2" }
+- **set_input**: { action: "set_input", block_type: "wait_seconds", input: "SECONDS", value: "0.05" }
+- **remove_block**: { action: "remove_block", block_type: "wait_seconds", occurrence: 0 }
+- **add_after**: { action: "add_after", block_type: "rgb_led_preset_color", blocks: [{...}], occurrence: 0 }
+- **insert**: { action: "insert", block: { type: "utilities_graph_viewer", var: "myGraph" } } — adds a standalone block to the workspace
+- **insert** (into chain): { action: "insert", chain: 0, position: 2, block: {...} } — inserts into an existing chain at position
+
+## get_block_details Tool
+Call this BEFORE creating a program to get the exact DSL syntax for blocks you plan to use.
+Pass an array of block type names. The system returns their DSL format, fields, and inputs.
+Example: get_block_details({ block_types: ["esp32_set_pin_on", "esp32_setup_ultrasonic"] })
 
 ## Modifying a Program
-When the user asks to change, fix, or modify the existing program, **regenerate the complete program** as a full blocks array (same format as creating a program).
+When the user asks to change, fix, or modify the existing program, **regenerate the complete program** via the **create_program** tool.
 Include ALL original blocks and logic — the output replaces the entire workspace.
-Only apply the specific changes the user asked for; keep everything else the same.
-
-**Always output the complete program.**`
+Only apply the specific changes the user asked for; keep everything else the same.`
     : `## create_program Tool
 The "blocks" parameter is a **JSON string** (not an object). Encode the blocks array as a JSON string.
 The blocks array contains chains. Each chain is an array of sequential blocks.
@@ -280,10 +289,12 @@ create_program({ blocks: JSON.stringify([
 The "operations" parameter is a **JSON string** encoding an array of operations.
 Use this for small changes.
 Operations:
-- **set_field**: { action: "set_field", block_type: "wait_seconds", field: "SECONDS", value: "0.05" }
-- **set_input**: { action: "set_input", block_type: "rgb_led_set_color", input: "RED", value: "128" }
+- **set_field**: { action: "set_field", block_type: "esp32_set_pin_on", field: "PIN", value: "2" }
+- **set_input**: { action: "set_input", block_type: "wait_seconds", input: "SECONDS", value: "0.05" }
 - **remove_block**: { action: "remove_block", block_type: "wait_seconds", occurrence: 0 }
 - **add_after**: { action: "add_after", block_type: "rgb_led_preset_color", blocks: [{...}], occurrence: 0 }
+- **insert**: { action: "insert", block: { type: "utilities_graph_viewer", var: "myGraph" } } — adds a standalone block to the workspace
+- **insert** (into chain): { action: "insert", chain: 0, position: 2, block: {...} } — inserts into an existing chain at position
 
 ## get_block_details Tool
 Call this BEFORE creating a program to get the exact DSL syntax for blocks you plan to use.
@@ -297,7 +308,7 @@ ${responseInstructions}
 
 ## Available Block Categories
 These are the blocks available in the workspace. Each entry shows the block type and what it does.
-When you need the exact DSL syntax for a block, ${mode === 'ollama' ? 'list the block types you plan to use and the syntax will be provided' : 'call the get_block_details tool'}.
+When you need the exact DSL syntax for a block, call the **get_block_details** tool.
 ${blockCatalog}
 
 ## Built-in Control Blocks
@@ -332,6 +343,11 @@ ${blockCatalog}
   - **utilities_print** ("Print to Console"): Log text and values
   - **utilities_elapsed_time** ("Elapsed Time"): Get elapsed seconds
   - **controls_flow_statements** ("Break/Continue"): Break/continue
+
+### Graphing
+  - **utilities_setup_graph** ("Setup Graph"): Create a named graph with axis labels, color, and style. Stores graph in a variable.
+  - **utilities_plot_point** ("Plot Point"): Add an (x, y) data point to a graph variable.
+  - **utilities_graph_viewer** ("Graph Viewer"): Show/hide a live chart for a graph variable (visual only).
 
 ${exampleSection}
 

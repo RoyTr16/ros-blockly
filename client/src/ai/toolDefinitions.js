@@ -45,7 +45,7 @@ export function buildToolDeclarations() {
         properties: {
           operations: {
             type: 'STRING',
-            description: 'A JSON string encoding an array of modification operations. Each operation has: action ("set_field"|"set_input"|"remove_block"|"add_after"), block_type, and action-specific fields.',
+            description: 'A JSON string encoding an array of modification operations. Each operation has: action ("set_field"|"set_input"|"remove_block"|"add_after"|"insert"), block_type (for set/remove/add_after), and action-specific fields.',
           },
         },
         required: ['operations'],

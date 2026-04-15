@@ -1,14 +1,13 @@
-// Ollama backend — two-phase pipeline:
-// Phase 1: Model reads lightweight catalog + picks blocks it needs
-// Phase 2: System injects DSL syntax → model generates the program
+// Ollama backend — native tool calling pipeline:
+// Model calls get_block_details to learn DSL syntax, then create_program/modify_program to generate
 
 import { buildSystemPrompt, getBlockDetails, getAllBlockTypes } from './promptBuilder';
 
-const DEFAULT_MODEL = import.meta.env.VITE_OLLAMA_MODEL || 'qwen2.5-coder:7b';
+const DEFAULT_MODEL = import.meta.env.VITE_OLLAMA_MODEL || 'qwen3:8b';
 
 let ollamaUrl = null;
 let model = DEFAULT_MODEL;
-let chatHistory = []; // { role: 'user'|'assistant', content: string }
+let chatHistory = []; // { role: 'user'|'assistant'|'tool', content: string, tool_calls?: [...] }
 
 export function initOllama(url, modelName) {
   ollamaUrl = url.replace(/\/$/, '');
@@ -46,54 +45,105 @@ export async function listModels() {
   }
 }
 
-// Extract DSL JSON from a ```json code block in the response
-// Only returns data if it looks like a valid DSL program (array of block chains) or modification
-function extractDSL(text) {
-  // Match ```json or plain ``` code fences
-  const match = text.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
-  if (!match) return null;
-  try {
-    const parsed = JSON.parse(match[1].trim());
-    // Validate structure: must be array-of-arrays with {type} objects, or {blocks}, or {operations}
-    if (Array.isArray(parsed)) {
-      // Check that it looks like block chains: [[{type:...}, ...], ...]
-      const isBlockChains = parsed.length > 0 && parsed.every(chain =>
-        Array.isArray(chain) && chain.length > 0 && chain[0]?.type
-      );
-      return isBlockChains ? parsed : null;
-    }
-    if (parsed?.blocks && Array.isArray(parsed.blocks)) return parsed;
-    if (parsed?.operations && Array.isArray(parsed.operations)) return parsed;
-    return null;
-  } catch (e) {
-    return null;
-  }
-}
-
-// Extract block type names mentioned in the response text
-function extractRequestedBlocks(text) {
+// Build Ollama-format tool declarations
+function buildOllamaTools() {
   const allTypes = getAllBlockTypes();
-  const found = new Set();
-  for (const t of allTypes) {
-    if (text.includes(t)) found.add(t);
-  }
-  return [...found];
+  return [
+    {
+      type: 'function',
+      function: {
+        name: 'get_block_details',
+        description: 'Get the exact DSL syntax for specific block types before creating a program. Call this first to learn the fields and inputs for blocks you plan to use.',
+        parameters: {
+          type: 'object',
+          properties: {
+            block_types: {
+              type: 'array',
+              items: { type: 'string', enum: allTypes },
+              description: 'Array of block type names to get details for.',
+            },
+          },
+          required: ['block_types'],
+        },
+      },
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'create_program',
+        description: 'Create a new Blockly program from a blocks array.',
+        parameters: {
+          type: 'object',
+          properties: {
+            blocks: {
+              type: 'array',
+              description: 'Array of block chains. Each chain is an array of block objects. Each block has a "type" string and additional fields.',
+              items: {
+                type: 'array',
+                items: { type: 'object' },
+              },
+            },
+          },
+          required: ['blocks'],
+        },
+      },
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'modify_program',
+        description: 'Apply targeted modifications to the current program.',
+        parameters: {
+          type: 'object',
+          properties: {
+            operations: {
+              type: 'array',
+              description: 'Array of modification operations.',
+              items: {
+                type: 'object',
+                properties: {
+                  action: {
+                    type: 'string',
+                    enum: ['set_field', 'set_input', 'remove_block', 'add_after', 'insert'],
+                    description: 'The modification action to perform.',
+                  },
+                  block_type: { type: 'string', description: 'Target block type (for set_field, set_input, remove_block, add_after).' },
+                  occurrence: { type: 'integer', description: 'Which occurrence of block_type to target (0-indexed, default 0).' },
+                  field: { type: 'string', description: 'Field name (for set_field).' },
+                  input: { type: 'string', description: 'Input name (for set_input).' },
+                  value: { type: 'string', description: 'New value (for set_field, set_input).' },
+                  block: { type: 'object', description: 'Block DSL object to insert.' },
+                  blocks: { type: 'array', items: { type: 'object' }, description: 'Array of block DSL objects (for add_after).' },
+                },
+                required: ['action'],
+              },
+            },
+          },
+          required: ['operations'],
+        },
+      },
+    },
+  ];
 }
 
-// Core API call to Ollama
-async function callOllama(messages) {
+// Core API call to Ollama with optional tools
+async function callOllama(messages, { tools = null, think = false } = {}) {
+  const body = {
+    model,
+    stream: false,
+    messages,
+    options: {
+      temperature: 0.2,
+      num_predict: 8192,
+    },
+  };
+  if (tools) body.tools = tools;
+  if (think) body.think = true;
+
   const res = await fetch(`${ollamaUrl}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model,
-      stream: false,
-      messages,
-      options: {
-        temperature: 0.2,
-        num_predict: 8192,
-      },
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {
@@ -102,7 +152,57 @@ async function callOllama(messages) {
   }
 
   const data = await res.json();
-  return data.message?.content || '';
+  return data.message || { role: 'assistant', content: '' };
+}
+
+// Execute a tool call locally and return the result
+function executeToolCall(name, args) {
+  if (name === 'get_block_details') {
+    try {
+      const blockTypes = Array.isArray(args.block_types)
+        ? args.block_types
+        : typeof args.block_types === 'string'
+          ? JSON.parse(args.block_types)
+          : [args.block_types];
+      const details = getBlockDetails(Array.isArray(blockTypes) ? blockTypes : [blockTypes]);
+      return details || 'No details found for the requested block types.';
+    } catch (e) {
+      return `Error parsing block_types: ${e.message}`;
+    }
+  }
+  // create_program and modify_program are handled by the caller
+  return null;
+}
+
+// Normalize modify_program operations from the many formats the model might produce
+// Expected: [{action: "insert", block: {...}}, ...]
+// Model might send:
+//   1. Array of ops (correct): [{action: "insert", ...}]
+//   2. Double-wrapped: {operations: [...]} → extract .operations
+//   3. Single op object: {action: "insert", block: {...}} → wrap in array
+//   4. Action-as-key: {insert: {block: {...}}} → [{action: "insert", block: {...}}]
+//   5. Action-as-key with nested value: {set_field: {block_type: "...", field: "...", value: "..."}}
+function normalizeOperations(raw) {
+  if (!raw || typeof raw !== 'object') return [];
+  // Already an array
+  if (Array.isArray(raw)) return raw;
+  // Double-wrapped: { operations: [...] }
+  if (Array.isArray(raw.operations)) return raw.operations;
+  // Single op with action field: { action: "insert", ... }
+  if (raw.action) return [raw];
+  // Action-as-key: { insert: { block: {...} } } or { set_field: { block_type: "...", ... } }
+  const KNOWN_ACTIONS = ['set_field', 'set_input', 'remove_block', 'add_after', 'insert', 'add_block'];
+  const ops = [];
+  for (const key of KNOWN_ACTIONS) {
+    if (raw[key]) {
+      const val = typeof raw[key] === 'object' ? raw[key] : {};
+      ops.push({ action: key, ...val });
+    }
+  }
+  if (ops.length > 0) return ops;
+  // Give up
+  console.warn('[Ollama] Could not normalize operations:', JSON.stringify(raw));
+  return [];
 }
 
 // Send a message and return { text, toolCalls } (same interface as gemini.js)
@@ -117,85 +217,137 @@ export async function sendMessage(userMessage, currentWorkspaceCode = null, _opt
   chatHistory.push({ role: 'user', content: fullMessage });
 
   const systemPrompt = buildSystemPrompt('ollama');
-  const allMessages = [
+  const tools = buildOllamaTools();
+
+  const buildMessages = () => [
     { role: 'system', content: systemPrompt },
     ...chatHistory,
   ];
 
-  let content;
+  let response;
   try {
-    content = await callOllama(allMessages);
+    response = await callOllama(buildMessages(), { tools });
   } catch (e) {
     chatHistory.pop();
     if (e.message.includes('API error')) throw e;
     throw new Error(`Cannot reach Ollama at ${ollamaUrl}. Make sure the Ollama container is running and CORS is enabled (OLLAMA_ORIGINS=*).`);
   }
 
-  // Detect question-only messages early — suppress program generation
-  const questionOnly = /^\s*(what|how|why|explain|describe|tell me about)\b/i.test(userMessage)
-    && !/\b(and |then |but |also |change|make|fix|add|create|build|modify|update|set|remove)\b/i.test(userMessage);
+  // Tool calling loop: handle get_block_details calls, then let model continue
+  const MAX_ROUNDS = 3;
+  let rounds = 0;
+  let explanation = response.content || '';
+  const programToolCalls = [];
 
-  // Phase 1: Check if the model produced a program directly
-  let dsl = questionOnly ? null : extractDSL(content);
+  while (response.tool_calls && response.tool_calls.length > 0 && rounds < MAX_ROUNDS) {
+    rounds++;
 
-  // If no DSL yet but the model mentioned block types → inject syntax + ask for program (Phase 2)
-  if (!dsl && !questionOnly) {
-    const requestedBlocks = extractRequestedBlocks(content);
-    if (requestedBlocks.length > 0) {
-      console.log('[Ollama] Phase 2: injecting DSL syntax for:', requestedBlocks);
-      const details = getBlockDetails(requestedBlocks);
-      if (details) {
-        chatHistory.push({ role: 'assistant', content });
-        const syntaxInjection = `Here is the DSL syntax for the blocks you selected:\n\n${details}\n\nNow output ONLY the complete program as a \`\`\`json code block. Do not repeat the explanation.`;
-        chatHistory.push({ role: 'user', content: syntaxInjection });
+    // Add assistant message with tool calls to history
+    chatHistory.push({
+      role: 'assistant',
+      content: response.content || '',
+      tool_calls: response.tool_calls,
+    });
 
-        try {
-          const phase2Content = await callOllama([
-            { role: 'system', content: systemPrompt },
-            ...chatHistory,
-          ]);
-          dsl = extractDSL(phase2Content);
-          if (!dsl) console.warn('[Ollama] Phase 2 produced no valid DSL. Response:', phase2Content.substring(0, 500));
-
-          // Clean up history: replace phase1+injection with final response
-          chatHistory.pop(); // remove syntax injection
-          chatHistory.pop(); // remove phase 1 response
-          // Preserve phase 1 explanation, append phase 2 program
-          const phase1Explanation = content.replace(/I'll use[:\s]+[\w\s,_]+/i, '').trim();
-          const phase2Explanation = phase2Content.replace(/```(?:json)?\s*\n?[\s\S]*?```/g, '').trim();
-          content = [phase1Explanation, phase2Explanation, phase2Content.match(/```(?:json)?\s*\n?[\s\S]*?```/)?.[0] || ''].filter(Boolean).join('\n\n');
-          chatHistory.push({ role: 'assistant', content: phase2Content });
-        } catch {
-          chatHistory.pop();
-          chatHistory.pop();
-          chatHistory.push({ role: 'assistant', content });
-        }
-      } else {
-        chatHistory.push({ role: 'assistant', content });
+    let hasGetDetails = false;
+    for (const tc of response.tool_calls) {
+      const fn = tc.function;
+      if (fn.name === 'get_block_details') {
+        hasGetDetails = true;
+        const result = executeToolCall(fn.name, fn.arguments);
+        chatHistory.push({
+          role: 'tool',
+          content: result,
+        });
+      } else if (fn.name === 'create_program' || fn.name === 'modify_program') {
+        console.log(`[Ollama] Tool call: ${fn.name}`, JSON.stringify(fn.arguments).slice(0, 500));
+        programToolCalls.push({ name: fn.name, args: fn.arguments });
       }
-    } else {
-      chatHistory.push({ role: 'assistant', content });
     }
-  } else {
-    chatHistory.push({ role: 'assistant', content });
+
+    // If there were only program tool calls (no get_block_details), we're done
+    if (!hasGetDetails) break;
+
+    // Continue the conversation — model should now generate the program
+    try {
+      response = await callOllama(buildMessages(), { tools });
+    } catch {
+      break;
+    }
+
+    // Accumulate explanation text
+    if (response.content) {
+      explanation = (explanation + '\n\n' + response.content).trim();
+    }
   }
 
-  // Build tool calls from DSL
+  // If no tool calls found in the loop, check the final response for program calls
+  if (programToolCalls.length === 0 && response.tool_calls) {
+    for (const tc of response.tool_calls) {
+      const fn = tc.function;
+      if (fn.name === 'create_program' || fn.name === 'modify_program') {
+        console.log(`[Ollama] Final tool call: ${fn.name}`, JSON.stringify(fn.arguments).slice(0, 500));
+        programToolCalls.push({ name: fn.name, args: fn.arguments });
+      }
+    }
+  }
+
+  // Add final assistant message to history
+  if (!response.tool_calls || response.tool_calls.length === 0) {
+    chatHistory.push({ role: 'assistant', content: response.content || '' });
+    if (response.content) {
+      explanation = (explanation ? explanation + '\n\n' + response.content : response.content).trim();
+    }
+  }
+
+  // Parse program tool calls into our standard format
   const toolCalls = [];
-  if (dsl && !questionOnly) {
-    if (Array.isArray(dsl)) {
-      toolCalls.push({ name: 'create_program', args: { blocks: dsl } });
-    } else if (dsl.blocks) {
-      toolCalls.push({ name: 'create_program', args: { blocks: dsl.blocks } });
-    } else if (dsl.operations) {
-      toolCalls.push({ name: 'modify_program', args: { operations: dsl.operations } });
+  for (const ptc of programToolCalls) {
+    try {
+      if (ptc.name === 'create_program') {
+        let blocks = ptc.args.blocks;
+        // If model still sends a string despite schema, parse it
+        if (typeof blocks === 'string') blocks = JSON.parse(blocks);
+        // Unwrap double-wrapped: { blocks: [...] } → [...]
+        if (blocks && !Array.isArray(blocks) && Array.isArray(blocks.blocks)) {
+          blocks = blocks.blocks;
+        }
+        if (Array.isArray(blocks)) {
+          toolCalls.push({ name: 'create_program', args: { blocks } });
+        }
+      } else if (ptc.name === 'modify_program') {
+        let operations = ptc.args.operations;
+        // If model still sends a string despite schema, parse it
+        if (typeof operations === 'string') operations = JSON.parse(operations);
+        // Normalize from the many formats the model might produce
+        operations = normalizeOperations(operations);
+        if (Array.isArray(operations) && operations.length > 0) {
+          toolCalls.push({ name: 'modify_program', args: { operations } });
+        }
+      }
+    } catch (e) {
+      console.warn('[Ollama] Failed to parse tool call args:', e.message);
     }
   }
 
-  // Clean up explanation: remove JSON code blocks and "I'll use:" block selection text
-  const explanation = content
+  // Also try to extract DSL from text content as fallback (model may output JSON in text)
+  if (toolCalls.length === 0 && explanation) {
+    const match = explanation.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
+    if (match) {
+      try {
+        const parsed = JSON.parse(match[1].trim());
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed.every(c => Array.isArray(c) && c[0]?.type)) {
+          toolCalls.push({ name: 'create_program', args: { blocks: parsed } });
+        }
+      } catch { /* ignore */ }
+    }
+  }
+
+  // Clean up explanation: remove JSON code blocks
+  const cleanExplanation = explanation
     .replace(/```(?:json)?\s*\n?[\s\S]*?```/g, '')
-    .replace(/I'll use[:\s]+[\w\s,_]+$/im, '')
+    .replace(/<think>[\s\S]*?<\/think>/g, '')
     .trim();
-  return { text: explanation, toolCalls };
+
+  return { text: cleanExplanation, toolCalls };
 }

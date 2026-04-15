@@ -6,8 +6,17 @@ import { getAllResetActions } from '../packages/PackageLoader';
 const useRobotControl = () => {
   const { ros, connected, addLog } = useRos();
   const [generatedCode, setGeneratedCode] = useState('');
+  const [codeGroups, setCodeGroups] = useState([]);
+  const [preamble, setPreamble] = useState('');
   const [running, setRunning] = useState(false);
   const abortRef = useRef(null);
+  // Keep refs in sync with state so runCode always reads fresh values
+  const codeGroupsRef = useRef(codeGroups);
+  const preambleRef = useRef(preamble);
+  const generatedCodeRef = useRef(generatedCode);
+  codeGroupsRef.current = codeGroups;
+  preambleRef.current = preamble;
+  generatedCodeRef.current = generatedCode;
 
   const stopExecution = () => {
     if (abortRef.current) {
@@ -55,18 +64,49 @@ const useRobotControl = () => {
       });
 
       // Execute the generated code inside an async wrapper
+      // If there are multiple disconnected groups, run them concurrently with Promise.all
       // The generated code assumes 'ros', 'ROSLIB', 'log', and 'wait' are available
-      const asyncCode = `
-        return (async () => {
-          try {
-            ${generatedCode}
-          } catch (err) {
-            if (err.name === 'AbortError') return;
-            console.error(err);
-            log('Error: ' + err.message);
+      let asyncCode;
+      const currentGroups = codeGroupsRef.current;
+      const currentPreamble = preambleRef.current;
+      const currentCode = generatedCodeRef.current;
+      console.log(`[RunCode] codeGroups: ${currentGroups.length}, preamble length: ${currentPreamble.length}`);
+      if (currentGroups.length > 1) {
+        console.log('[RunCode] Running', currentGroups.length, 'groups concurrently');
+        // Run disconnected block groups concurrently
+        // Preamble contains shared variable declarations and function definitions
+        const groupsCode = currentGroups.map((g, i) => `
+          async function __group${i}__() {
+            ${g}
           }
-        })();
-      `;
+        `).join('\n');
+        const allPromises = currentGroups.map((_, i) => `__group${i}__()`).join(', ');
+        asyncCode = `
+          return (async () => {
+            try {
+              ${currentPreamble}
+              ${groupsCode}
+              await Promise.all([${allPromises}]);
+            } catch (err) {
+              if (err.name === 'AbortError') return;
+              console.error(err);
+              log('Error: ' + err.message);
+            }
+          })();
+        `;
+      } else {
+        asyncCode = `
+          return (async () => {
+            try {
+              ${currentCode}
+            } catch (err) {
+              if (err.name === 'AbortError') return;
+              console.error(err);
+              log('Error: ' + err.message);
+            }
+          })();
+        `;
+      }
 
       const runBlocklyCode = new Function('ros', 'ROSLIB', 'log', 'wait', asyncCode);
       const promise = runBlocklyCode(ros, ROSLIB, addLog, wait);
@@ -151,6 +191,8 @@ const useRobotControl = () => {
   return {
     generatedCode,
     setGeneratedCode,
+    setCodeGroups,
+    setPreamble,
     runCode,
     stopExecution,
     running,
