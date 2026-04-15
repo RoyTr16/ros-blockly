@@ -46,6 +46,18 @@
   border-color: var(--accent-indigo);
 }
 
+.ai-chat-thinking-toggle {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.ai-chat-thinking-toggle.active {
+  color: var(--accent-indigo);
+  border-color: var(--accent-indigo);
+  background: rgba(99, 102, 241, 0.1);
+}
+
 /* API Key setup */
 .ai-chat-key-setup {
   display: flex;

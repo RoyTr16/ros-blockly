@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import * as Blockly from 'blockly/core';
-import { initGemini, isInitialized, sendMessage, extractBlocklyJson, resetChat } from '../../ai/gemini';
+import { initGemini, isInitialized, sendMessage, extractBlocklyJson, resetChat, setThinkingLevel, getThinkingLevel } from '../../ai/gemini';
 import './AiChat.css';
 
 const API_KEY_STORAGE = 'gemini_api_key';
@@ -25,6 +25,8 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
   const savedStateRef = useRef(null);
   const messagesEndRef = useRef(null);
 
+  const [thinking, setThinking] = useState(getThinkingLevel());
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
@@ -36,6 +38,12 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
     initGemini(trimmed);
     setKeySet(true);
     setMessages([{ role: 'assistant', text: 'Ready! Describe what you want to build.' }]);
+  };
+
+  const handleToggleThinking = () => {
+    const next = thinking === 'off' ? 'on' : 'off';
+    setThinking(next);
+    setThinkingLevel(next);
   };
 
   const handleClear = () => {
@@ -314,32 +322,39 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
         // Pure conversation — no code block in response
         setMessages(prev => [...prev, { role: 'assistant', text: responseText }]);
       } else if (extracted.parseError || !extracted.json) {
-        // LLM sent a code block but JSON was invalid — ask to fix
+        // LLM sent a code block but JSON was invalid
+        // Show explanation if present — it may be all the user needed
         if (extracted.explanation) {
           setMessages(prev => [...prev, { role: 'assistant', text: extracted.explanation }]);
         }
-        const fixMsg = `Your JSON had a parse error: "${extracted.parseError}". Please fix and resend only the corrected JSON.`;
-        responseText = await sendMessage(fixMsg, null);
-        extracted = extractBlocklyJson(responseText);
-        if (!extracted || !extracted.json) throw new Error('Failed to get valid JSON from AI');
-        // Fall through to validation below
-        if (extracted.explanation) {
-          setMessages(prev => [...prev, { role: 'assistant', text: extracted.explanation }]);
-        }
-        // Validate + test load with up to 2 retries
-        let result = validateJson(extracted.json);
-        if (result.error) {
-          setMessages(prev => [...prev, { role: 'error', text: `Validation: ${result.error}` }]);
-          const fixMsg2 = buildFixMessage(result.error);
-          responseText = await sendMessage(fixMsg2, null);
+        // Only retry the JSON fix if the user's message looks like a program request
+        const looksLikeProgramRequest = /\b(create|make|build|write|generate|modify|change|add|remove|update|program|code)\b/i.test(text);
+        if (looksLikeProgramRequest) {
+          const fixMsg = `Your JSON had a parse error: "${extracted.parseError}". Please fix and resend only the corrected JSON.`;
+          responseText = await sendMessage(fixMsg, null);
           extracted = extractBlocklyJson(responseText);
-          if (!extracted || !extracted.json) throw new Error(`AI responded without code after: ${result.error}`);
-          result = validateJson(extracted.json);
-          if (result.error) throw new Error(`Validation failed: ${result.error}`);
+          if (!extracted || !extracted.json) {
+            const detail = extracted?.parseError || 'no JSON in response';
+            setMessages(prev => [...prev, { role: 'error', text: `Could not generate valid JSON (${detail}). The program may be too complex — try a simpler request.` }]);
+          } else {
+            if (extracted.explanation) {
+              setMessages(prev => [...prev, { role: 'assistant', text: extracted.explanation }]);
+            }
+            let result = validateJson(extracted.json);
+            if (result.error) {
+              setMessages(prev => [...prev, { role: 'error', text: `Validation: ${result.error}` }]);
+              const fixMsg2 = buildFixMessage(result.error);
+              responseText = await sendMessage(fixMsg2, null);
+              extracted = extractBlocklyJson(responseText);
+              if (!extracted || !extracted.json) throw new Error(`AI responded without code after: ${result.error}`);
+              result = validateJson(extracted.json);
+              if (result.error) throw new Error(`Validation failed: ${result.error}`);
+            }
+            setPendingJson(result.json);
+            showPreview(result.json);
+            setMessages(prev => [...prev, { role: 'pending', text: 'Program ready. Preview shown in workspace.' }]);
+          }
         }
-        setPendingJson(result.json);
-        showPreview(result.json);
-        setMessages(prev => [...prev, { role: 'pending', text: 'Program ready. Preview shown in workspace.' }]);
       } else {
         // Valid JSON — run full validation pipeline (auto-fix + static checks + test load)
         if (extracted.explanation) {
@@ -423,6 +438,14 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
           AI Assistant
         </span>
         <div style={{ display: 'flex', gap: '4px' }}>
+          <button
+            className={`ai-chat-clear ai-chat-thinking-toggle ${thinking === 'on' ? 'active' : ''}`}
+            onClick={handleToggleThinking}
+            title={thinking === 'on' ? 'Thinking: ON (better quality, more tokens)' : 'Thinking: OFF (faster, fewer tokens)'}
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"/><line x1="10" y1="22" x2="14" y2="22"/></svg>
+            {thinking === 'on' ? 'Think' : 'Fast'}
+          </button>
           <button className="ai-chat-clear" onClick={handleChangeKey}>Key</button>
           <button className="ai-chat-clear" onClick={handleClear}>Clear</button>
         </div>
