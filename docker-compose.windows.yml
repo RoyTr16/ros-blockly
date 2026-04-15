@@ -23,6 +23,8 @@ services:
     ipc: host
     ports:
       - "${ROSBRIDGE_PORT}:9090"
+    environment:
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
     networks:
       - ros_net
 

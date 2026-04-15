@@ -17,6 +17,7 @@ services:
     ipc: host
     environment:
       - ROS_DOMAIN_ID=${ROS_DOMAIN_ID}
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
   robot:
     profiles: ["sim"]
