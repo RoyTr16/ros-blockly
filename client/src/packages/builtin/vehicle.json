@@ -4,9 +4,17 @@
   "version": "1.0.0",
   "description": "Differential-drive vehicle control via ROS Twist messages",
 
+  "ai": {
+    "subcategory_hints": {
+      "Vehicle": "Use Move Robot for simple velocity commands. Use Stop Robot to halt all movement. Use Publish Twist for advanced custom topic control."
+    }
+  },
+
   "blocks": [
     {
       "type": "ros_publish_twist",
+      "display_name": "Publish Twist",
+      "ai_description": "Publish a Twist message with linear and angular velocity to a custom ROS topic.",
       "definition": {
         "message0": "Publish Twist to %1",
         "args0": [
@@ -36,6 +44,8 @@
     },
     {
       "type": "move_robot",
+      "display_name": "Move Robot",
+      "ai_description": "Move the robot with specified linear (forward/back) and angular (turn) velocities.",
       "definition": {
         "message0": "Move Robot  Linear X %1  Angular Z %2",
         "args0": [
@@ -54,6 +64,8 @@
     },
     {
       "type": "stop_robot",
+      "display_name": "Stop Robot",
+      "ai_description": "Stop all robot movement immediately.",
       "definition": {
         "message0": "Stop Robot",
         "previousStatement": null,

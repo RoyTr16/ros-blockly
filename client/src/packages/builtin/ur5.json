@@ -4,9 +4,17 @@
   "version": "1.0.0",
   "description": "Joint control for the UR5 robotic arm via ROS trajectories",
 
+  "ai": {
+    "subcategory_hints": {
+      "UR5 Arm": "Use Move All Joints for coordinated multi-joint motion with trajectory planning. Use Move Single Joint for controlling one joint at a time."
+    }
+  },
+
   "blocks": [
     {
       "type": "ur5_move_joints",
+      "display_name": "Move All Joints",
+      "ai_description": "Move all 6 UR5 joints simultaneously to target positions (radians) over a duration using trajectory planning.",
       "definition": {
         "message0": "Move UR5 Joints",
         "message1": "Shoulder Pan %1",
@@ -44,6 +52,8 @@
     },
     {
       "type": "ur5_move_single_joint",
+      "display_name": "Move Single Joint",
+      "ai_description": "Move one UR5 joint directly to a position (radians) using position control.",
       "definition": {
         "message0": "Move UR5 %1 to position (radians) %2",
         "args0": [
