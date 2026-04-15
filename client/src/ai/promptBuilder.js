@@ -39,7 +39,11 @@ function describeBlockDSL(blockDef) {
   }
 
   const tooltip = blockDef.ai_description || def.tooltip || '';
-  return `- **${blockDef.type}**: ${tooltip}\n  DSL: { type: "${blockDef.type}", ${dslProps.join(', ')} }`;
+  let result = `- **${blockDef.type}**: ${tooltip}\n  DSL: { type: "${blockDef.type}", ${dslProps.join(', ')} }`;
+  if (blockDef.ai_example) {
+    result += `\n  Example: ${blockDef.ai_example}`;
+  }
+  return result;
 }
 
 // Build lightweight block catalog — categories + block names + tooltips

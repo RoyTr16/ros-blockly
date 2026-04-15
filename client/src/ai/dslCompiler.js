@@ -53,7 +53,7 @@ function compileBlock(dsl, variables, blockDefs) {
   const block = { type: blockType, id: uid() };
 
   // Determine which keys are fields, inputs, and special
-  const specialKeys = new Set(['type', 'var', 'body', 'do', 'then', 'else_if', 'else', 'condition', 'if', 'value', 'num', 'steps', 'function_name', 'args']);
+  const specialKeys = new Set(['type', 'var', 'body', 'do', 'then', 'else_if', 'else', 'condition', 'if', 'value', 'num', 'steps', 'function_name', 'args', 'joints']);
   const def = blockDefs[blockType];
 
   // --- Handle built-in blocks specially ---
@@ -318,6 +318,17 @@ function compileBlock(dsl, variables, blockDefs) {
       const varName = dsl.var;
       ensureVariable(variables, varName);
       block.fields.VAR = { id: variables[varName], name: varName, type: '' };
+    }
+
+    // Handle array shorthand: e.g. "joints": [v1, v2, ...] → map to ordered input_value fields
+    if (dsl.joints && Array.isArray(dsl.joints)) {
+      const inputNames = Object.keys(inputDefs);
+      dsl.joints.forEach((val, i) => {
+        if (i < inputNames.length) {
+          const name = inputNames[i];
+          block.inputs[name] = { block: makeValueBlock(val, inputDefs[name].check || null) };
+        }
+      });
     }
 
     // Map remaining DSL keys to fields or inputs

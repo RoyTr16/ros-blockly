@@ -91,7 +91,7 @@ async function callOllama(messages) {
       messages,
       options: {
         temperature: 0.2,
-        num_predict: 4096,
+        num_predict: 8192,
       },
     }),
   });
@@ -146,7 +146,7 @@ export async function sendMessage(userMessage, currentWorkspaceCode = null, _opt
       const details = getBlockDetails(requestedBlocks);
       if (details) {
         chatHistory.push({ role: 'assistant', content });
-        const syntaxInjection = `Here is the DSL syntax for the blocks you selected:\n\n${details}\n\nNow output the complete program as a \`\`\`json code block using these blocks.`;
+        const syntaxInjection = `Here is the DSL syntax for the blocks you selected:\n\n${details}\n\nNow output ONLY the complete program as a \`\`\`json code block. Do not repeat the explanation.`;
         chatHistory.push({ role: 'user', content: syntaxInjection });
 
         try {
@@ -155,6 +155,7 @@ export async function sendMessage(userMessage, currentWorkspaceCode = null, _opt
             ...chatHistory,
           ]);
           dsl = extractDSL(phase2Content);
+          if (!dsl) console.warn('[Ollama] Phase 2 produced no valid DSL. Response:', phase2Content.substring(0, 500));
 
           // Clean up history: replace phase1+injection with final response
           chatHistory.pop(); // remove syntax injection

@@ -15,6 +15,7 @@
       "type": "ur5_move_joints",
       "display_name": "Move All Joints",
       "ai_description": "Move all 6 UR5 joints simultaneously to target positions (radians) over a duration using trajectory planning.",
+      "ai_example": "{ type: \"ur5_move_joints\", shoulder_pan: 1.57, shoulder_lift: -0.5, elbow: 1.0, wrist_1: 0, wrist_2: 0, wrist_3: 0, duration: 2 }",
       "definition": {
         "message0": "Move UR5 Joints",
         "message1": "Shoulder Pan %1",
@@ -54,6 +55,7 @@
       "type": "ur5_move_single_joint",
       "display_name": "Move Single Joint",
       "ai_description": "Move one UR5 joint directly to a position (radians) using position control.",
+      "ai_example": "{ type: \"ur5_move_single_joint\", joint_topic: \"/ur5/shoulder_pan/cmd\", position: 1.57 }",
       "definition": {
         "message0": "Move UR5 %1 to position (radians) %2",
         "args0": [
