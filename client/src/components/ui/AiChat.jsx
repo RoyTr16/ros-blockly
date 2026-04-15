@@ -321,12 +321,6 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
   if (!keySet) {
     return (
       <div className="ai-chat">
-        <div className="ai-chat-header">
-          <span className="ai-chat-title">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"/><line x1="10" y1="22" x2="14" y2="22"/></svg>
-            AI Assistant
-          </span>
-        </div>
         <div className="ai-chat-key-setup">
           <div className="ai-chat-backend-tabs">
             <button className={`ai-chat-backend-tab ${backend === 'gemini' ? 'active' : ''}`} onClick={() => setBackend('gemini')}>Gemini</button>
@@ -388,11 +382,6 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
   return (
     <div className="ai-chat">
       <div className="ai-chat-header">
-        <span className="ai-chat-title">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"/><line x1="10" y1="22" x2="14" y2="22"/></svg>
-          AI Assistant
-        </span>
-        <div style={{ display: 'flex', gap: '4px' }}>
           {backend === 'gemini' && (
             <button
               className={`ai-chat-clear ai-chat-thinking-toggle ${thinking === 'on' ? 'active' : ''}`}
@@ -407,10 +396,19 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
             {backend === 'gemini' ? 'Key' : ollamaModel}
           </button>
           <button className="ai-chat-clear" onClick={handleClear}>Clear</button>
-        </div>
       </div>
 
       <div className="ai-chat-messages">
+        {messages.length === 0 && !loading && (
+          <div className="ai-chat-empty">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"/>
+              <line x1="10" y1="22" x2="14" y2="22"/>
+            </svg>
+            <span className="ai-chat-empty-text">Describe what you want to build</span>
+            <span className="ai-chat-empty-hint">e.g. "Blink the LED on pin 13 every second"</span>
+          </div>
+        )}
         {messages.map((msg, i) => (
           <div key={i} className={`ai-chat-msg ${msg.role}`}>
             {msg.text}
