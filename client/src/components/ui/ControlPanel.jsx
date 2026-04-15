@@ -6,7 +6,7 @@ import AiChat from './AiChat';
 import { useRos } from '../../context/RosContext';
 import './ControlPanel.css';
 
-const ControlPanel = ({ generatedCode, blocklyRef, onClose }) => {
+const ControlPanel = ({ generatedCode, blocklyRef, onClose, onPreviewChange }) => {
   const { logs } = useRos();
 
   return (
@@ -21,7 +21,7 @@ const ControlPanel = ({ generatedCode, blocklyRef, onClose }) => {
         </button>
       </div>
       <CodeDisplay code={generatedCode} />
-      <AiChat blocklyRef={blocklyRef} />
+      <AiChat blocklyRef={blocklyRef} onPreviewChange={onPreviewChange} />
       <FunctionPanel blocklyRef={blocklyRef} />
       <LogViewer logs={logs} />
     </div>

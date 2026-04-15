@@ -18,6 +18,33 @@
   position: relative;
 }
 
+/* AI preview overlay */
+.blockly-preview-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(99, 102, 241, 0.06);
+  border: 2px solid rgba(99, 102, 241, 0.35);
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 50;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12px;
+}
+
+.blockly-preview-badge {
+  background: rgba(99, 102, 241, 0.85);
+  color: white;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  padding: 4px 14px;
+  border-radius: 12px;
+  pointer-events: none;
+  user-select: none;
+}
+
 /* === Blockly Toolbox Overrides === */
 
 /* Category tree rows */

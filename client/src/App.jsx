@@ -11,6 +11,7 @@ const AppContent = () => {
   const { generatedCode, setGeneratedCode, runCode, stopExecution, running, resetRobot } = useRobotControl();
   const blocklyRef = useRef(null);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [previewActive, setPreviewActive] = useState(false);
 
   const handleCodeChange = (code) => {
     setGeneratedCode(code);
@@ -48,6 +49,11 @@ const AppContent = () => {
                 onCodeChange={handleCodeChange}
             />
             <GraphOverlay blocklyRef={blocklyRef} />
+            {previewActive && (
+              <div className="blockly-preview-overlay">
+                <span className="blockly-preview-badge">PREVIEW</span>
+              </div>
+            )}
         </div>
       </div>
 
@@ -56,6 +62,7 @@ const AppContent = () => {
           generatedCode={generatedCode}
           blocklyRef={blocklyRef}
           onClose={() => setPanelOpen(false)}
+          onPreviewChange={setPreviewActive}
         />
       )}
     </div>

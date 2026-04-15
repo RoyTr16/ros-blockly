@@ -7,7 +7,7 @@ const API_KEY_STORAGE = 'gemini_api_key';
 
 const ENV_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
 
-const AiChat = ({ blocklyRef }) => {
+const AiChat = ({ blocklyRef, onPreviewChange }) => {
   const [apiKey, setApiKey] = useState(() => localStorage.getItem(API_KEY_STORAGE) || ENV_KEY);
   const [keySet, setKeySet] = useState(() => {
     const saved = localStorage.getItem(API_KEY_STORAGE) || ENV_KEY;
@@ -21,6 +21,8 @@ const AiChat = ({ blocklyRef }) => {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [pendingJson, setPendingJson] = useState(null);
+  const [previewActive, setPreviewActive] = useState(false);
+  const savedStateRef = useRef(null);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -237,27 +239,46 @@ const AiChat = ({ blocklyRef }) => {
     return { json: fixed, error: null };
   };
 
-  const handleApply = () => {
-    if (!pendingJson) return;
-    // pendingJson was already validated via validateJson — just load it
+  // Show preview: save current workspace, load new JSON, activate overlay
+  const showPreview = (json) => {
     const ws = blocklyRef?.current?.getWorkspace?.();
-    if (!ws) {
-      setMessages(prev => [...prev, { role: 'error', text: 'No workspace available' }]);
-      return;
-    }
+    if (!ws) return;
+    savedStateRef.current = Blockly.serialization.workspaces.save(ws);
     try {
-      Blockly.serialization.workspaces.load(pendingJson, ws);
-      setPendingJson(null);
-      setMessages(prev => prev.map(m =>
-        m.role === 'pending' ? { ...m, role: 'success', text: 'Program loaded into workspace!' } : m
-      ));
+      Blockly.serialization.workspaces.load(json, ws);
+      setPreviewActive(true);
+      onPreviewChange?.(true);
     } catch (err) {
-      setMessages(prev => [...prev, { role: 'error', text: err.message }]);
+      // Restore if preview load fails
+      try { Blockly.serialization.workspaces.load(savedStateRef.current, ws); } catch (e) { /* best effort */ }
+      savedStateRef.current = null;
     }
   };
 
-  const handleReject = () => {
+  const handleApply = () => {
+    if (!pendingJson) return;
+    // Blocks are already loaded as preview — just confirm
+    savedStateRef.current = null;
     setPendingJson(null);
+    setPreviewActive(false);
+    onPreviewChange?.(false);
+    setMessages(prev => prev.map(m =>
+      m.role === 'pending' ? { ...m, role: 'success', text: 'Program loaded into workspace!' } : m
+    ));
+  };
+
+  const handleReject = () => {
+    // Restore the saved workspace state
+    if (savedStateRef.current) {
+      const ws = blocklyRef?.current?.getWorkspace?.();
+      if (ws) {
+        try { Blockly.serialization.workspaces.load(savedStateRef.current, ws); } catch (e) { /* best effort */ }
+      }
+      savedStateRef.current = null;
+    }
+    setPendingJson(null);
+    setPreviewActive(false);
+    onPreviewChange?.(false);
     setMessages(prev => prev.map(m =>
       m.role === 'pending' ? { ...m, role: 'assistant', text: 'Program dismissed. Feel free to ask for changes or a new program.' } : m
     ));
@@ -270,6 +291,16 @@ const AiChat = ({ blocklyRef }) => {
     setInput('');
     setMessages(prev => [...prev, { role: 'user', text }]);
     setLoading(true);
+    // Dismiss any active preview before processing new request
+    if (previewActive && savedStateRef.current) {
+      const ws = blocklyRef?.current?.getWorkspace?.();
+      if (ws) {
+        try { Blockly.serialization.workspaces.load(savedStateRef.current, ws); } catch (e) { /* best effort */ }
+      }
+      savedStateRef.current = null;
+      setPreviewActive(false);
+      onPreviewChange?.(false);
+    }
     setPendingJson(null);
 
     try {
@@ -305,15 +336,17 @@ const AiChat = ({ blocklyRef }) => {
         // Validate + test load with up to 2 retries
         let result = validateJson(extracted.json);
         if (result.error) {
+          setMessages(prev => [...prev, { role: 'error', text: `Validation: ${result.error}` }]);
           const fixMsg2 = buildFixMessage(result.error);
           responseText = await sendMessage(fixMsg2, null);
           extracted = extractBlocklyJson(responseText);
-          if (!extracted || !extracted.json) throw new Error('AI could not produce valid JSON');
+          if (!extracted || !extracted.json) throw new Error(`AI responded without code after: ${result.error}`);
           result = validateJson(extracted.json);
-          if (result.error) throw new Error(result.error);
+          if (result.error) throw new Error(`Validation failed: ${result.error}`);
         }
         setPendingJson(result.json);
-        setMessages(prev => [...prev, { role: 'pending', text: 'Program ready.' }]);
+        showPreview(result.json);
+        setMessages(prev => [...prev, { role: 'pending', text: 'Program ready. Preview shown in workspace.' }]);
       } else {
         // Valid JSON — run full validation pipeline (auto-fix + static checks + test load)
         if (extracted.explanation) {
@@ -324,19 +357,24 @@ const AiChat = ({ blocklyRef }) => {
 
         // Retry up to 2 times on validation errors
         for (let attempt = 0; attempt < 2 && result.error; attempt++) {
+          // Show the validation error to the user so they have visibility
+          setMessages(prev => [...prev, { role: 'error', text: `Validation: ${result.error}` }]);
           const fixMsg = buildFixMessage(result.error);
           responseText = await sendMessage(fixMsg, null);
           extracted = extractBlocklyJson(responseText);
-          if (!extracted || !extracted.json) throw new Error('AI could not fix the issue');
+          if (!extracted || !extracted.json) {
+            throw new Error(`AI responded without code after: ${result.error}`);
+          }
           if (extracted.explanation) {
             setMessages(prev => [...prev, { role: 'assistant', text: extracted.explanation }]);
           }
           result = validateJson(extracted.json);
         }
 
-        if (result.error) throw new Error(result.error);
+        if (result.error) throw new Error(`Validation failed: ${result.error}`);
         setPendingJson(result.json);
-        setMessages(prev => [...prev, { role: 'pending', text: 'Program ready.' }]);
+        showPreview(result.json);
+        setMessages(prev => [...prev, { role: 'pending', text: 'Program ready. Preview shown in workspace.' }]);
       }
     } catch (err) {
       console.error('AI Chat error:', err);
