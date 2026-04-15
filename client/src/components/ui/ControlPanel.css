@@ -102,3 +102,15 @@
   min-height: 0;
   padding-top: 16px;
 }
+
+/* Tab content: hidden by default, shown when active */
+.panel-tab-content {
+  display: none;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.panel-tab-content.active {
+  display: flex;
+}

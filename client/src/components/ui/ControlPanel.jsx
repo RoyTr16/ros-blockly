@@ -37,15 +37,16 @@ const ControlPanel = ({ generatedCode, blocklyRef, onClose, onPreviewChange }) =
         </button>
       </div>
 
-      {tab === 'chat' ? (
+      <div className={`panel-tab-content ${tab === 'chat' ? 'active' : ''}`}>
         <AiChat blocklyRef={blocklyRef} generatedCode={generatedCode} onPreviewChange={onPreviewChange} />
-      ) : (
+      </div>
+      <div className={`panel-tab-content ${tab === 'console' ? 'active' : ''}`}>
         <div className="panel-console-content">
           <CodeDisplay code={generatedCode} />
           <FunctionPanel blocklyRef={blocklyRef} />
           <LogViewer logs={logs} />
         </div>
-      )}
+      </div>
     </div>
   );
 };
