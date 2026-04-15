@@ -11,6 +11,7 @@ const API_KEY_STORAGE = 'gemini_api_key';
 const BACKEND_STORAGE = 'ai_backend';
 const OLLAMA_URL_STORAGE = 'ollama_url';
 const OLLAMA_MODEL_STORAGE = 'ollama_model';
+const GEMINI_MODEL_STORAGE = 'gemini_model';
 
 const ENV_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
 const DEFAULT_OLLAMA_URL = 'http://localhost:11434';
@@ -57,6 +58,11 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
   const savedStateRef = useRef(null);
   const messagesEndRef = useRef(null);
 
+  const [geminiModel, setGeminiModel] = useState(() => {
+    const saved = localStorage.getItem(GEMINI_MODEL_STORAGE);
+    if (saved) geminiBackend.setModel(saved);
+    return geminiBackend.getModel();
+  });
   const [thinking, setThinking] = useState(geminiBackend.getThinkingLevel());
 
   useEffect(() => {
@@ -455,14 +461,31 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
     <div className="ai-chat">
       <div className="ai-chat-header">
           {backend === 'gemini' && (
-            <button
-              className={`ai-chat-clear ai-chat-thinking-toggle ${thinking === 'on' ? 'active' : ''}`}
-              onClick={handleToggleThinking}
-              title={thinking === 'on' ? 'Thinking: ON (better quality, more tokens)' : 'Thinking: OFF (faster, fewer tokens)'}
-            >
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"/><line x1="10" y1="22" x2="14" y2="22"/></svg>
-              {thinking === 'on' ? 'Think' : 'Fast'}
-            </button>
+            <>
+              <select
+                className="ai-chat-model-select"
+                value={geminiModel}
+                onChange={(e) => {
+                  const m = e.target.value;
+                  setGeminiModel(m);
+                  localStorage.setItem(GEMINI_MODEL_STORAGE, m);
+                  geminiBackend.setModel(m);
+                }}
+                title="Gemini model"
+              >
+                {geminiBackend.getModels().map(m => (
+                  <option key={m.id} value={m.id}>{m.label}</option>
+                ))}
+              </select>
+              <button
+                className={`ai-chat-clear ai-chat-thinking-toggle ${thinking === 'on' ? 'active' : ''}`}
+                onClick={handleToggleThinking}
+                title={thinking === 'on' ? 'Thinking: ON (better quality, more tokens)' : 'Thinking: OFF (faster, fewer tokens)'}
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"/><line x1="10" y1="22" x2="14" y2="22"/></svg>
+                {thinking === 'on' ? 'Think' : 'Fast'}
+              </button>
+            </>
           )}
           <button className="ai-chat-clear" onClick={handleChangeKey}>
             {backend === 'gemini' ? 'Key' : ollamaModel}

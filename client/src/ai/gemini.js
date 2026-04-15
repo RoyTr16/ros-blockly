@@ -3,9 +3,15 @@ import { buildSystemPrompt, getBlockDetails } from './promptBuilder';
 import { buildToolDeclarations } from './toolDefinitions';
 
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-const MODEL = 'gemini-3-flash-preview';
+
+const GEMINI_MODELS = [
+  { id: 'gemini-3-flash-preview', label: 'Flash' },
+  { id: 'gemini-3.1-flash-lite-preview', label: 'Lite' },
+];
+const DEFAULT_MODEL = GEMINI_MODELS[0].id;
 
 let apiKey = null;
+let model = DEFAULT_MODEL;
 let chatHistory = []; // { role: 'user'|'model', parts: [...] }
 let thinkingLevel = 'off'; // 'off' | 'on'
 
@@ -20,6 +26,19 @@ export function isInitialized() {
 
 export function resetChat() {
   chatHistory = [];
+}
+
+export function getModel() {
+  return model;
+}
+
+export function setModel(m) {
+  model = m;
+  chatHistory = [];
+}
+
+export function getModels() {
+  return GEMINI_MODELS;
 }
 
 export function setThinkingLevel(level) {
@@ -48,7 +67,7 @@ async function callApi(contents, retries = 1) {
     },
   };
 
-  const url = `${API_BASE}/${MODEL}:generateContent?key=${apiKey}`;
+  const url = `${API_BASE}/${model}:generateContent?key=${apiKey}`;
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

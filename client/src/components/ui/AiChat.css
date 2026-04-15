@@ -30,6 +30,21 @@
   border-color: var(--accent-indigo);
 }
 
+.ai-chat-model-select {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+
+.ai-chat-model-select:hover {
+  color: var(--text-primary);
+  border-color: var(--accent-indigo);
+}
+
 .ai-chat-thinking-toggle {
   display: flex;
   align-items: center;
