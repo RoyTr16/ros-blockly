@@ -68,10 +68,6 @@ services:
     networks:
       - ros_net
 
-networks:
-  ros_net:
-    driver: bridge
-
   ollama:
     profiles: ["ollama"]
     image: ollama/ollama
@@ -86,6 +82,10 @@ networks:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+
+networks:
+  ros_net:
+    driver: bridge
 
 volumes:
   ollama_data:
