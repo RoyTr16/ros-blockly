@@ -58,12 +58,46 @@
   background: rgba(99, 102, 241, 0.1);
 }
 
-/* API Key setup */
+/* API Key / Backend setup */
 .ai-chat-key-setup {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 12px 0;
+}
+
+.ai-chat-backend-tabs {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.ai-chat-backend-tab {
+  flex: 1;
+  background: var(--bg-primary);
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 5px 0;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ai-chat-backend-tab:not(:last-child) {
+  border-right: 1px solid var(--border-color);
+}
+
+.ai-chat-backend-tab.active {
+  background: var(--accent-indigo);
+  color: #fff;
+}
+
+.ai-chat-backend-tab:not(.active):hover {
+  color: var(--text-primary);
+  background: var(--bg-secondary);
 }
 
 .ai-chat-key-setup label {

@@ -8,6 +8,8 @@
 # Usage:
 #   docker compose -f docker-compose.windows.yml up              (LAN robots)
 #   docker compose -f docker-compose.windows.yml --profile sim up (with simulator)
+#   docker compose -f docker-compose.windows.yml --profile ollama up (with local Ollama)
+#   Profiles can be combined: --profile sim --profile ollama
 
 services:
   zenoh-bridge:
@@ -52,6 +54,7 @@ services:
       - "${CLIENT_PORT}:5173"
     environment:
       - VITE_GEMINI_API_KEY=${VITE_GEMINI_API_KEY}
+      - VITE_OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.1}
     volumes:
       - ./client:/app
       - /app/node_modules
@@ -90,3 +93,21 @@ services:
 networks:
   ros_net:
     driver: bridge
+
+  ollama:
+    profiles: ["ollama"]
+    image: ollama/ollama
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  ollama_data:

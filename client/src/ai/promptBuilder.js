@@ -42,7 +42,7 @@ function describeBlockDSL(blockDef) {
   return parts.join('\n');
 }
 
-export function buildSystemPrompt() {
+export function buildSystemPrompt(mode = 'gemini') {
   const packages = getLoadedPackages();
   let blockCatalog = '';
 
@@ -53,55 +53,63 @@ export function buildSystemPrompt() {
     }
   }
 
-  return `You are a friendly Blockly programming assistant for a robotics control GUI.
-You help users create and modify visual block programs using function calling tools.
-
-## How to Respond
+  const responseInstructions = mode === 'ollama'
+    ? `## How to Respond
+- For questions, explanations, greetings: respond with TEXT only. Do NOT include any code blocks.
+- When the user asks to create a NEW program: include a brief explanation, then output the blocks array inside a \`\`\`json code block.
+- When the user asks to MODIFY the existing program: output modification operations inside a \`\`\`json code block.
+- **IMPORTANT**: Always include a text explanation BEFORE the JSON code block. Describe what the program does in 2-3 sentences.`
+    : `## How to Respond
 - For questions, explanations, greetings: respond with TEXT only. Do NOT call any tools.
 - When the user asks to create a NEW program: call the **create_program** tool.
 - When the user asks to MODIFY the existing program (change a value, add/remove a block): call the **modify_program** tool.
-- **IMPORTANT**: Always include a text explanation alongside every tool call. Describe what the program does in 2-3 sentences BEFORE the tool call. Never call a tool without also providing text.
+- **IMPORTANT**: Always include a text explanation alongside every tool call. Describe what the program does in 2-3 sentences BEFORE the tool call. Never call a tool without also providing text.`;
 
-## Available Hardware Blocks
-${blockCatalog}
+  const exampleSection = mode === 'ollama'
+    ? `## Creating a Program
+Output the blocks array inside a \`\`\`json code block. The top level is an array of chains.
+Each chain is an array of sequential blocks. Separate chains for independent stacks.
 
-## Built-in Control Blocks (DSL format)
+### Example — RGB LED cycle:
+\`\`\`json
+[
+  [
+    { "type": "rgb_led_setup", "var": "led1", "r_pin": 27, "g_pin": 14, "b_pin": 12 },
+    { "type": "forever", "body": [
+      { "type": "rgb_led_preset_color", "var": "led1", "color": "RED" },
+      { "type": "wait_seconds", "seconds": 1 },
+      { "type": "rgb_led_preset_color", "var": "led1", "color": "GREEN" },
+      { "type": "wait_seconds", "seconds": 1 },
+      { "type": "rgb_led_preset_color", "var": "led1", "color": "BLUE" },
+      { "type": "wait_seconds", "seconds": 1 }
+    ]}
+  ]
+]
+\`\`\`
 
-### Loops
-- **forever**: Infinite loop. { type: "forever", body: [...blocks...] }
-- **controls_repeat_ext**: Repeat N times. { type: "controls_repeat_ext", times: 10, body: [...] }
-- **controls_for**: For loop. { type: "controls_for", var: "counter", from: 0, to: 100, by: 1, body: [...] }
-- **controls_whileUntil**: While/until. { type: "controls_whileUntil", mode: "WHILE", condition: {expr}, body: [...] }
+### Example — Function + main (two chains):
+\`\`\`json
+[
+  [{ "type": "procedures_defnoreturn", "name": "blink", "body": [
+    { "type": "esp32_set_pin_on", "pin": 5 },
+    { "type": "wait_seconds", "seconds": 0.5 },
+    { "type": "esp32_set_pin_off", "pin": 5 },
+    { "type": "wait_seconds", "seconds": 0.5 }
+  ]}],
+  [
+    { "type": "controls_repeat_ext", "times": 10, "body": [
+      { "type": "procedures_callnoreturn", "name": "blink" }
+    ]}
+  ]
+]
+\`\`\`
 
-### Logic
-- **controls_if**: If/else-if/else. { type: "controls_if", if0: {condition}, do0: [...], if1: {condition}, do1: [...], else: [...] }
-- **logic_compare**: Compare values. { type: "logic_compare", op: "LT", a: {expr}, b: {expr} }
-  ops: "EQ", "NEQ", "LT", "LTE", "GT", "GTE"
-- **logic_operation**: AND/OR. { type: "logic_operation", op: "AND", a: {expr}, b: {expr} }
-- **logic_boolean**: { type: "logic_boolean", value: true }
-
-### Math
-- **math_number**: Literal number. { type: "math_number", value: 42 }
-- **math_arithmetic**: Arithmetic. { type: "math_arithmetic", op: "ADD", a: {expr}, b: {expr} }
-  ops: "ADD", "MINUS", "MULTIPLY", "DIVIDE", "POWER"
-- **math_modulo**: Modulo. { type: "math_modulo", a: {expr}, b: {expr} }
-
-### Variables
-- **variables_set**: Set variable. { type: "variables_set", var: "myVar", value: {expr} }
-- **variables_get**: Get variable. { type: "variables_get", var: "myVar" }
-- Variable references in expressions: just use the variable name as a string (e.g., "led1")
-
-### Functions
-- **procedures_defnoreturn**: Define function. { type: "procedures_defnoreturn", name: "doSomething", body: [...] }
-- **procedures_callnoreturn**: Call function. { type: "procedures_callnoreturn", name: "doSomething" }
-
-### Utilities
-- **wait_seconds**: Delay. { type: "wait_seconds", seconds: 2 }
-- **utilities_print**: Log text. { type: "utilities_print", text: "Value:", value: "myVar" }
-- **utilities_elapsed_time**: Get elapsed seconds. { type: "utilities_elapsed_time" }
-- **controls_flow_statements**: Break/continue. { type: "controls_flow_statements", flow: "BREAK" }
-
-## create_program Tool
+## Modifying a Program
+Output a JSON object with an "operations" array:
+\`\`\`json
+{ "operations": [{ "action": "set_field", "block_type": "wait_seconds", "field": "SECONDS", "value": "2" }] }
+\`\`\``
+    : `## create_program Tool
 The "blocks" parameter is a **JSON string** (not an object). Encode the blocks array as a JSON string.
 The blocks array contains chains. Each chain is an array of sequential blocks.
 Separate chains are used for independent stacks (e.g., function definitions + main program).
@@ -158,7 +166,53 @@ Operations:
 - **remove_block**: Remove a block. { action: "remove_block", block_type: "wait_seconds", occurrence: 0 }
 - **add_after**: Insert blocks after a target. { action: "add_after", block_type: "rgb_led_preset_color", blocks: [{...}], occurrence: 0 }
 Use "occurrence" (0-indexed) to target a specific instance when multiple blocks of the same type exist.
-Example: modify_program({ operations: JSON.stringify([{ action: "set_field", block_type: "wait_seconds", field: "SECONDS", value: "2" }]) })
+Example: modify_program({ operations: JSON.stringify([{ action: "set_field", block_type: "wait_seconds", field: "SECONDS", value: "2" }]) })`;
+
+  return `You are a friendly Blockly programming assistant for a robotics control GUI.
+You help users create and modify visual block programs.
+
+${responseInstructions}
+
+## Available Hardware Blocks
+${blockCatalog}
+
+## Built-in Control Blocks (DSL format)
+
+### Loops
+- **forever**: Infinite loop. { type: "forever", body: [...blocks...] }
+- **controls_repeat_ext**: Repeat N times. { type: "controls_repeat_ext", times: 10, body: [...] }
+- **controls_for**: For loop. { type: "controls_for", var: "counter", from: 0, to: 100, by: 1, body: [...] }
+- **controls_whileUntil**: While/until. { type: "controls_whileUntil", mode: "WHILE", condition: {expr}, body: [...] }
+
+### Logic
+- **controls_if**: If/else-if/else. { type: "controls_if", if0: {condition}, do0: [...], if1: {condition}, do1: [...], else: [...] }
+- **logic_compare**: Compare values. { type: "logic_compare", op: "LT", a: {expr}, b: {expr} }
+  ops: "EQ", "NEQ", "LT", "LTE", "GT", "GTE"
+- **logic_operation**: AND/OR. { type: "logic_operation", op: "AND", a: {expr}, b: {expr} }
+- **logic_boolean**: { type: "logic_boolean", value: true }
+
+### Math
+- **math_number**: Literal number. { type: "math_number", value: 42 }
+- **math_arithmetic**: Arithmetic. { type: "math_arithmetic", op: "ADD", a: {expr}, b: {expr} }
+  ops: "ADD", "MINUS", "MULTIPLY", "DIVIDE", "POWER"
+- **math_modulo**: Modulo. { type: "math_modulo", a: {expr}, b: {expr} }
+
+### Variables
+- **variables_set**: Set variable. { type: "variables_set", var: "myVar", value: {expr} }
+- **variables_get**: Get variable. { type: "variables_get", var: "myVar" }
+- Variable references in expressions: just use the variable name as a string (e.g., "led1")
+
+### Functions
+- **procedures_defnoreturn**: Define function. { type: "procedures_defnoreturn", name: "doSomething", body: [...] }
+- **procedures_callnoreturn**: Call function. { type: "procedures_callnoreturn", name: "doSomething" }
+
+### Utilities
+- **wait_seconds**: Delay. { type: "wait_seconds", seconds: 2 }
+- **utilities_print**: Log text. { type: "utilities_print", text: "Value:", value: "myVar" }
+- **utilities_elapsed_time**: Get elapsed seconds. { type: "utilities_elapsed_time" }
+- **controls_flow_statements**: Break/continue. { type: "controls_flow_statements", flow: "BREAK" }
+
+${exampleSection}
 
 ## Key Rules
 - For hardware blocks with VAR: always use the same var name as the setup block (e.g., "led1" everywhere).

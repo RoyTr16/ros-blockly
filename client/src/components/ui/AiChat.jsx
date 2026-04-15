@@ -1,19 +1,36 @@
 import React, { useState, useRef, useEffect } from 'react';
 import * as Blockly from 'blockly/core';
-import { initGemini, isInitialized, sendMessage, resetChat, setThinkingLevel, getThinkingLevel } from '../../ai/gemini';
+import * as geminiBackend from '../../ai/gemini';
+import * as ollamaBackend from '../../ai/ollama';
 import { compileDSL } from '../../ai/dslCompiler';
 import './AiChat.css';
 
 const API_KEY_STORAGE = 'gemini_api_key';
+const BACKEND_STORAGE = 'ai_backend';
+const OLLAMA_URL_STORAGE = 'ollama_url';
+const OLLAMA_MODEL_STORAGE = 'ollama_model';
 
 const ENV_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
+const DEFAULT_OLLAMA_URL = 'http://localhost:11434';
+const DEFAULT_OLLAMA_MODEL = import.meta.env.VITE_OLLAMA_MODEL || 'llama3.1';
 
 const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
+  const [backend, setBackend] = useState(() => localStorage.getItem(BACKEND_STORAGE) || 'gemini');
   const [apiKey, setApiKey] = useState(() => localStorage.getItem(API_KEY_STORAGE) || ENV_KEY);
+  const [ollamaUrl, setOllamaUrl] = useState(() => localStorage.getItem(OLLAMA_URL_STORAGE) || DEFAULT_OLLAMA_URL);
+  const [ollamaModel, setOllamaModel] = useState(() => localStorage.getItem(OLLAMA_MODEL_STORAGE) || DEFAULT_OLLAMA_MODEL);
+  const [ollamaModels, setOllamaModels] = useState([]);
   const [keySet, setKeySet] = useState(() => {
+    const savedBackend = localStorage.getItem(BACKEND_STORAGE) || 'gemini';
+    if (savedBackend === 'ollama') {
+      const url = localStorage.getItem(OLLAMA_URL_STORAGE) || DEFAULT_OLLAMA_URL;
+      const model = localStorage.getItem(OLLAMA_MODEL_STORAGE) || DEFAULT_OLLAMA_MODEL;
+      ollamaBackend.initOllama(url, model);
+      return true;
+    }
     const saved = localStorage.getItem(API_KEY_STORAGE) || ENV_KEY;
     if (saved) {
-      initGemini(saved);
+      geminiBackend.initGemini(saved);
       return true;
     }
     return false;
@@ -26,17 +43,37 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
   const savedStateRef = useRef(null);
   const messagesEndRef = useRef(null);
 
-  const [thinking, setThinking] = useState(getThinkingLevel());
+  const [thinking, setThinking] = useState(geminiBackend.getThinkingLevel());
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
+  // Fetch Ollama models when URL changes and backend is ollama
+  useEffect(() => {
+    if (backend === 'ollama' && ollamaUrl) {
+      ollamaBackend.listModels().then(setOllamaModels).catch(() => setOllamaModels([]));
+    }
+  }, [backend, ollamaUrl]);
+
+  const currentBackend = () => backend === 'ollama' ? ollamaBackend : geminiBackend;
+
   const handleSetKey = () => {
+    if (backend === 'ollama') {
+      const url = ollamaUrl.trim() || DEFAULT_OLLAMA_URL;
+      localStorage.setItem(OLLAMA_URL_STORAGE, url);
+      localStorage.setItem(OLLAMA_MODEL_STORAGE, ollamaModel);
+      localStorage.setItem(BACKEND_STORAGE, 'ollama');
+      ollamaBackend.initOllama(url, ollamaModel);
+      setKeySet(true);
+      setMessages([{ role: 'assistant', text: `Connected to Ollama (${ollamaModel}). Describe what you want to build.` }]);
+      return;
+    }
     const trimmed = apiKey.trim();
     if (!trimmed) return;
     localStorage.setItem(API_KEY_STORAGE, trimmed);
-    initGemini(trimmed);
+    localStorage.setItem(BACKEND_STORAGE, 'gemini');
+    geminiBackend.initGemini(trimmed);
     setKeySet(true);
     setMessages([{ role: 'assistant', text: 'Ready! Describe what you want to build.' }]);
   };
@@ -44,20 +81,18 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
   const handleToggleThinking = () => {
     const next = thinking === 'off' ? 'on' : 'off';
     setThinking(next);
-    setThinkingLevel(next);
+    geminiBackend.setThinkingLevel(next);
   };
 
   const handleClear = () => {
-    resetChat();
+    currentBackend().resetChat();
     setMessages([{ role: 'assistant', text: 'Chat cleared. Describe what you want to build.' }]);
   };
 
   const handleChangeKey = () => {
-    resetChat();
+    currentBackend().resetChat();
     setMessages([]);
     setKeySet(false);
-    setApiKey('');
-    localStorage.removeItem(API_KEY_STORAGE);
   };
 
   // Try to load JSON into workspace to test validity, then restore previous state
@@ -189,7 +224,7 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
 
     try {
       const currentCode = generatedCode?.trim() || null;
-      const { text: responseText, toolCalls } = await sendMessage(text, currentCode);
+      const { text: responseText, toolCalls } = await currentBackend().sendMessage(text, currentCode);
 
       // Show text response if any
       if (responseText) {
@@ -280,20 +315,58 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
           </span>
         </div>
         <div className="ai-chat-key-setup">
-          <label>
-            Enter your <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a> API key to enable the AI assistant.
-          </label>
-          <div className="ai-chat-key-row">
-            <input
-              className="ai-chat-key-input"
-              type="password"
-              placeholder="AIzaSy..."
-              value={apiKey}
-              onChange={e => setApiKey(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleSetKey()}
-            />
-            <button className="ai-chat-key-btn" onClick={handleSetKey}>Save</button>
+          <div className="ai-chat-backend-tabs">
+            <button className={`ai-chat-backend-tab ${backend === 'gemini' ? 'active' : ''}`} onClick={() => setBackend('gemini')}>Gemini</button>
+            <button className={`ai-chat-backend-tab ${backend === 'ollama' ? 'active' : ''}`} onClick={() => setBackend('ollama')}>Ollama</button>
           </div>
+          {backend === 'gemini' ? (
+            <>
+              <label>
+                Enter your <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a> API key.
+              </label>
+              <div className="ai-chat-key-row">
+                <input
+                  className="ai-chat-key-input"
+                  type="password"
+                  placeholder="AIzaSy..."
+                  value={apiKey}
+                  onChange={e => setApiKey(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSetKey()}
+                />
+                <button className="ai-chat-key-btn" onClick={handleSetKey}>Save</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <label>
+                Connect to a local <a href="https://ollama.com" target="_blank" rel="noopener noreferrer">Ollama</a> instance.
+              </label>
+              <div className="ai-chat-key-row">
+                <input
+                  className="ai-chat-key-input"
+                  type="text"
+                  placeholder="http://localhost:11434"
+                  value={ollamaUrl}
+                  onChange={e => setOllamaUrl(e.target.value)}
+                />
+              </div>
+              <div className="ai-chat-key-row">
+                <input
+                  className="ai-chat-key-input"
+                  type="text"
+                  placeholder="Model name (e.g. llama3.1)"
+                  value={ollamaModel}
+                  onChange={e => setOllamaModel(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSetKey()}
+                  list="ollama-models"
+                />
+                <datalist id="ollama-models">
+                  {ollamaModels.map(m => <option key={m} value={m} />)}
+                </datalist>
+                <button className="ai-chat-key-btn" onClick={handleSetKey}>Connect</button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     );
@@ -307,15 +380,19 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
           AI Assistant
         </span>
         <div style={{ display: 'flex', gap: '4px' }}>
-          <button
-            className={`ai-chat-clear ai-chat-thinking-toggle ${thinking === 'on' ? 'active' : ''}`}
-            onClick={handleToggleThinking}
-            title={thinking === 'on' ? 'Thinking: ON (better quality, more tokens)' : 'Thinking: OFF (faster, fewer tokens)'}
-          >
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"/><line x1="10" y1="22" x2="14" y2="22"/></svg>
-            {thinking === 'on' ? 'Think' : 'Fast'}
+          {backend === 'gemini' && (
+            <button
+              className={`ai-chat-clear ai-chat-thinking-toggle ${thinking === 'on' ? 'active' : ''}`}
+              onClick={handleToggleThinking}
+              title={thinking === 'on' ? 'Thinking: ON (better quality, more tokens)' : 'Thinking: OFF (faster, fewer tokens)'}
+            >
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"/><line x1="10" y1="22" x2="14" y2="22"/></svg>
+              {thinking === 'on' ? 'Think' : 'Fast'}
+            </button>
+          )}
+          <button className="ai-chat-clear" onClick={handleChangeKey}>
+            {backend === 'gemini' ? 'Key' : ollamaModel}
           </button>
-          <button className="ai-chat-clear" onClick={handleChangeKey}>Key</button>
           <button className="ai-chat-clear" onClick={handleClear}>Clear</button>
         </div>
       </div>
