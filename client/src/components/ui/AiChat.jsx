@@ -200,6 +200,11 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
       const createCall = toolCalls.find(tc => tc.name === 'create_program');
       const modifyCall = toolCalls.find(tc => tc.name === 'modify_program');
 
+      // If there's a tool call but no explanation text, add a default
+      if ((createCall || modifyCall) && !responseText.trim()) {
+        setMessages(prev => [...prev, { role: 'assistant', text: createCall ? 'Here\'s the program I created for you:' : 'I\'ve applied the requested changes:' }]);
+      }
+
       if (createCall) {
         // blocks comes as a JSON string from the tool call — parse it
         let blocksData;
