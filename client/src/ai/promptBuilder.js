@@ -73,10 +73,17 @@ ${blockCatalog}
 
 ## Built-in Blockly Blocks
 You can also use standard Blockly blocks:
-- **controls_repeat_ext**: Repeat loop. Input: TIMES (Number), statement input: DO
+- **controls_repeat_ext**: Repeat N times. Input: TIMES (connect a math_number block!), statement input: DO. Example:
+  "inputs": { "TIMES": { "block": { "type": "math_number", "id": "...", "fields": { "NUM": 10 } } }, "DO": { "block": { ... } } }
+  WARNING: TIMES is an INPUT that needs a math_number block, NOT a field. Never leave it empty.
 - **controls_whileUntil**: While/until loop. Field: MODE ("WHILE"/"UNTIL"), input: BOOL, statement: DO
-- **controls_for**: For loop. Field: VAR, inputs: FROM, TO, BY (Number), statement: DO
-- **controls_if**: If/else. Inputs: IF0, DO0, optional ELSE
+- **controls_for**: For loop. Field: VAR, inputs: FROM, TO, BY (connect math_number blocks!), statement: DO
+- **controls_if**: If/else-if/else. Inputs: IF0 (condition), DO0 (body). For else-if add IF1/DO1, IF2/DO2 etc. For else add ELSE.
+  IMPORTANT: When using else-if or else, you MUST include "extraState" on the block:
+  "extraState": { "elseIfCount": 1, "hasElse": true }  ← set elseIfCount to the number of else-if branches.
+  Example (if / else-if / else):
+  { "type": "controls_if", "id": "x", "extraState": { "elseIfCount": 1, "hasElse": true },
+    "inputs": { "IF0": { "block": ... }, "DO0": { "block": ... }, "IF1": { "block": ... }, "DO1": { "block": ... }, "ELSE": { "block": ... } } }
 - **logic_compare**: Compare. Field: OP ("EQ","NEQ","LT","LTE","GT","GTE"), inputs: A, B
 - **logic_operation**: AND/OR. Field: OP ("AND"/"OR"), inputs: A, B
 - **logic_boolean**: Boolean. Field: BOOL ("TRUE"/"FALSE")
@@ -152,11 +159,57 @@ And declare it in variables:
 "variables": [{ "name": "led1", "id": "var_id_1" }]
 \`\`\`
 
-CRITICAL: When a setup block stores its result in a variable (e.g. rgb_led_setup stores in "led1"), ALL subsequent blocks that operate on that device MUST use the SAME variable. For example, if rgb_led_setup uses VAR "led1", then rgb_led_set_color, rgb_led_preset_color, and rgb_led_off must ALL use VAR "led1" — the same variable id. Do NOT create separate variables for each block. Similarly, esp32_setup_ultrasonic stores in a variable that is then read by other blocks.
+## ⚠ CRITICAL VARIABLE RULES — READ CAREFULLY
 
-Use descriptive variable names like "led1", "distance", "sensor1" — never single letters like i, j, k, m.
+**Rule 1 — Variable reuse:** When a setup block (rgb_led_setup, esp32_setup_ultrasonic) stores its result in a variable, ALL subsequent blocks that operate on that device MUST reference the EXACT SAME variable id. Never create a new variable for each action block.
 
-## Example
+**Rule 2 — Naming:** Use descriptive names like "led1", "sensor1", "distance". NEVER use single-letter names (i, j, k, m, n, x, y).
+
+**Rule 3 — Variable count:** If you have 1 setup block, you need exactly 1 variable for it. If 3 action blocks use that device, all 3 must share the same variable id.
+
+### Variable reuse example — RGB LED setup + preset colors:
+notice how EVERY block uses the same VAR id "v_led1" and the variables array has only ONE entry:
+\`\`\`json
+{
+  "blocks": {
+    "languageVersion": 0,
+    "blocks": [{
+      "type": "rgb_led_setup", "id": "s1", "x": 50, "y": 50,
+      "fields": { "VAR": { "id": "v_led1" } },
+      "inputs": {
+        "R_PIN": { "block": { "type": "esp32_gpio_pin", "id": "p1", "fields": { "PIN": "27" } } },
+        "G_PIN": { "block": { "type": "esp32_gpio_pin", "id": "p2", "fields": { "PIN": "14" } } },
+        "B_PIN": { "block": { "type": "esp32_gpio_pin", "id": "p3", "fields": { "PIN": "12" } } }
+      },
+      "next": { "block": {
+        "type": "rgb_led_preset_color", "id": "c1",
+        "fields": { "VAR": { "id": "v_led1" }, "COLOR": "RED" },
+        "next": { "block": {
+          "type": "wait_seconds", "id": "w1", "fields": { "SECONDS": 1 },
+          "next": { "block": {
+            "type": "rgb_led_preset_color", "id": "c2",
+            "fields": { "VAR": { "id": "v_led1" }, "COLOR": "BLUE" }
+          }}
+        }}
+      }}
+    }]
+  },
+  "variables": [{ "name": "led1", "id": "v_led1" }]
+}
+\`\`\`
+Key: rgb_led_setup, rgb_led_preset_color(RED), and rgb_led_preset_color(BLUE) ALL use VAR id "v_led1". Only 1 variable in the array.
+
+## COMMON MISTAKES — AVOID THESE
+1. ❌ Creating separate variables (i, j, k, m, n...) for each action block. Fix: reuse the setup variable.
+2. ❌ Using single-letter variable names. Fix: use "led1", "sensor1", etc.
+3. ❌ Declaring 8 variables when only 1 device exists. Fix: 1 device = 1 variable.
+4. ❌ Using wait_seconds with an input block. Fix: it's a FIELD: "fields": {"SECONDS": 2}.
+5. ❌ Inventing block types that don't exist. Fix: only use blocks from the catalog above.
+6. ❌ Leaving controls_repeat_ext TIMES empty (produces "repeat 0 times"). Fix: always connect a math_number block to TIMES.
+7. ❌ Leaving controls_for FROM/TO/BY empty. Fix: always connect math_number blocks to these inputs.
+8. ❌ Using controls_if with IF1/DO1 or ELSE inputs without "extraState". Fix: add "extraState": {"elseIfCount": N, "hasElse": true/false} to the block.
+
+## Example — Digital Pin
 User: "Turn on pin 5, wait 2 seconds, then turn it off"
 Response:
 \`\`\`json
@@ -209,5 +262,6 @@ Response:
 - Use sensible default values for pins and parameters.
 - Wrap sequences in proper next chains.
 - Always declare variables used by variable fields.
-- Keep explanations concise (2-3 sentences).`;
+- Keep explanations concise (2-3 sentences).
+- REMEMBER: 1 setup block = 1 variable. All action blocks for that device share the SAME variable id. Never create extra variables.`;
 }

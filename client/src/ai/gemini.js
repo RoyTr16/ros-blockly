@@ -18,7 +18,7 @@ function getOrCreateChat() {
   if (chatSession) return chatSession;
 
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.5-flash-lite',
+    model: 'gemini-2.5-flash',
     systemInstruction: { parts: [{ text: buildSystemPrompt() }] },
     generationConfig: {
       temperature: 0.2,
