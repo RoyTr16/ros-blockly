@@ -189,8 +189,8 @@ function compileBlock(dsl, variables, blockDefs) {
   if (blockType === 'logic_compare') {
     block.fields = { OP: dsl.op || 'EQ' };
     block.inputs = {};
-    if (dsl.a) block.inputs.A = { block: compileExpression(dsl.a, variables, blockDefs) };
-    if (dsl.b) block.inputs.B = { block: compileExpression(dsl.b, variables, blockDefs) };
+    if (dsl.a != null) block.inputs.A = { block: compileExpression(dsl.a, variables, blockDefs) };
+    if (dsl.b != null) block.inputs.B = { block: compileExpression(dsl.b, variables, blockDefs) };
     return block;
   }
 
@@ -198,8 +198,8 @@ function compileBlock(dsl, variables, blockDefs) {
   if (blockType === 'logic_operation') {
     block.fields = { OP: dsl.op || 'AND' };
     block.inputs = {};
-    if (dsl.a) block.inputs.A = { block: compileExpression(dsl.a, variables, blockDefs) };
-    if (dsl.b) block.inputs.B = { block: compileExpression(dsl.b, variables, blockDefs) };
+    if (dsl.a != null) block.inputs.A = { block: compileExpression(dsl.a, variables, blockDefs) };
+    if (dsl.b != null) block.inputs.B = { block: compileExpression(dsl.b, variables, blockDefs) };
     return block;
   }
 
@@ -226,16 +226,16 @@ function compileBlock(dsl, variables, blockDefs) {
   if (blockType === 'math_arithmetic') {
     block.fields = { OP: dsl.op || 'ADD' };
     block.inputs = {};
-    if (dsl.a) block.inputs.A = { block: compileExpression(dsl.a, variables, blockDefs) };
-    if (dsl.b) block.inputs.B = { block: compileExpression(dsl.b, variables, blockDefs) };
+    if (dsl.a != null) block.inputs.A = { block: compileExpression(dsl.a, variables, blockDefs) };
+    if (dsl.b != null) block.inputs.B = { block: compileExpression(dsl.b, variables, blockDefs) };
     return block;
   }
 
   // math_modulo: { type, a, b }
   if (blockType === 'math_modulo') {
     block.inputs = {};
-    if (dsl.a) block.inputs.DIVIDEND = { block: compileExpression(dsl.a, variables, blockDefs) };
-    if (dsl.b) block.inputs.DIVISOR = { block: compileExpression(dsl.b, variables, blockDefs) };
+    if (dsl.a != null) block.inputs.DIVIDEND = { block: compileExpression(dsl.a, variables, blockDefs) };
+    if (dsl.b != null) block.inputs.DIVISOR = { block: compileExpression(dsl.b, variables, blockDefs) };
     return block;
   }
 
