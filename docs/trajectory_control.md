@@ -60,9 +60,9 @@ The following diagram illustrates the command pipeline from the web interface to
 ## Component Details
 
 ### 1. Frontend: The "Move Block"
-**File**: `client/src/blocks/ur5/joint_control.js`
-*   **Role**: The User Interface.
-*   **Action**: Instead of sending 6 individual numbers (which is messy and non-standard), it constructs a single `trajectory_msgs/JointTrajectory` message.
+**Note**: The original trajectory block (`blocks/ur5/joint_control.js`) has been removed. The UR5 package (`client/src/packages/builtin/ur5.json`) currently only defines the "Move Single Joint" block for direct position control (see `direct_joint_control.md`). A trajectory block that publishes to `/ur5/trajectory` can be added to `ur5.json` following the JSON package system (see `block_implementation_strategy.md`).
+
+*   **Expected Action**: Constructs a single `trajectory_msgs/JointTrajectory` message with target positions for all 6 joints.
 *   **Topic**: `/ur5/trajectory`
 *   **Parity**: This is exactly how high-level planners (like MoveIt 2) communicate with robot drivers.
 

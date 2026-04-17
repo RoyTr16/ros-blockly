@@ -1,71 +1,134 @@
 # Block Implementation Strategy
 
-This document outlines the strategy for adding new ROS-enabled blocks to the Blockly interface in a scalable and maintainable way.
+This document outlines how ROS-enabled blocks are defined and loaded in the Blockly interface using the **JSON Package System**.
 
 ## 1. Goals
-*   **Scalability**: Easily add support for new robots (e.g., UR5) without rewriting core logic.
-*   **Maintainability**: Separate block UI definitions from code generation logic.
-*   **Genericism**: Use generic blocks where possible (e.g., a generic "Publish to Topic" block) while offering specialized blocks for common actions (e.g., "Move Arm").
+*   **Scalability**: Add support for new robots or hardware by dropping in a single JSON file — no JavaScript authoring required.
+*   **Maintainability**: Block UI definitions and code generators live together in one self-contained package file.
+*   **Genericism**: Packages can define any combination of blocks, generators, reset actions, toolbox categories, and AI hints.
 
 ## 2. Architecture
 
-### A. Block Definitions (`client/src/blocks/`)
-Instead of defining blocks manually in a single file, we will split them by category or robot.
-*   `ros_common_blocks.js`: Generic ROS blocks (Publish, Subscribe, Service Call).
-*   `ur5_blocks.js`: Specialized blocks for the UR5 robot (e.g., "Move Joint 1").
-*   `vehicle_blocks.js`: Specialized blocks for mobile bases.
+### A. JSON Package System (`client/src/packages/`)
 
-**Pattern**:
-Use JSON-style definitions where possible for readability, or helper functions to standardize the "look and feel" (color coding by message type).
+All robot/hardware blocks are defined declaratively in JSON files and loaded at startup by `PackageLoader.js`.
 
-### B. Code Generation (`client/src/generators/`)
-We will implement a **Helper Library** for generating ROS code to avoid duplication.
+**Built-in packages** (`packages/builtin/`):
+*   `vehicle.json` — Differential-drive vehicle control (Move Robot, Stop Robot, Publish Twist).
+*   `ur5.json` — UR5 robotic arm single-joint position control.
+*   `esp32.json` — ESP32 GPIO, ultrasonic sensors, RGB LEDs via micro-ROS.
 
-**Current Problem**:
-`ros_generator.js` currently hardcodes the `ROSLIB.Topic` creation inside every block generator.
-
-**Proposed Solution**:
-Create a `RosBlockly` helper class in the generated code (injected at runtime) or a generator utility that standardizes:
-1.  Topic instantiation (singleton pattern to avoid creating multiple publishers for the same topic).
-2.  Message creation.
-3.  Publishing logic.
-
-### C. Toolbox Management
-The toolbox is currently hardcoded in `BlocklyComponent.jsx`.
-We will move this to a configuration file (`client/src/config/toolbox.js`) that exports the XML structure. This allows us to dynamically load categories based on the selected robot.
-
-## 3. Implementation Steps
-
-### Step 1: Refactor Code Generator
-Create a standard template for ROS publishers in `helpers/ros_utils.js`.
-
-**Crucial Change (Async Support)**:
-Do **not** wrap generated code in `(function(){})()`. The execution engine uses a global `async` wrapper.
-```javascript
-// Example Generator
-return `
-  var topic = ...;
-  topic.publish(msg);
-  // Optional: await wait(1);
-`;
+Each package JSON file contains:
+```json
+{
+  "id": "vehicle",
+  "name": "Vehicle Control",
+  "version": "1.0.0",
+  "description": "...",
+  "ai": { "subcategory_hints": { ... } },
+  "blocks": [ ... ],
+  "reset": [ ... ],
+  "category": { ... }
+}
 ```
 
-### Step 2: Define UR5 Blocks
-We need blocks for:
-1.  **Joint Control**: Moving individual joints (shoulder, elbow, wrist).
-2.  **Gripper Control**: Open/Close gripper.
+**`blocks`**: Array of block definitions, each containing:
+*   `type`: Unique block ID (e.g., `move_robot`, `ur5_move_single_joint`).
+*   `definition`: Standard Blockly JSON block definition (`message0`, `args0`, etc.).
+*   `generator`: Code generation spec with a `template` string and input mappings.
+*   `ai_description`: Natural-language description used by the AI chat to understand the block.
 
-### Step 3: Dynamic Toolbox
-The toolbox is configured in `client/src/config/toolbox.js`.
-Categories are split into separate files in `client/src/config/categories/` (e.g., `ur5.js`, `logic.js`).
-To add a new block:
-1.  Define the block in `blocks/<category>/<block>.js`.
-2.  Add it to the XML string in `config/categories/<category>.js`. (No need to touch `toolbox.js` unless it's a new top-level category).
+**`reset`**: Array of actions executed when the user clicks "Reset". Each action publishes to a topic or calls a service.
+
+**`category`**: Defines the toolbox category (name, colour, blocks list) that appears in the Blockly sidebar.
+
+### B. Template Syntax (Code Generation)
+
+Instead of writing JavaScript generator functions, package authors write code **templates** with placeholder syntax:
+
+| Syntax | Meaning | Example |
+|---|---|---|
+| `{{$FIELD}}` | Raw field value (inserted as-is) | `{{$LINEAR_X}}` → `0.5` |
+| `{{INPUT}}` | Value input (via `valueToCode`) | `{{POSITION}}` → evaluated expression |
+| `{{%VAR}}` | Variable name (for codegen) | `{{%VAR}}` → `distance` |
+
+`PackageLoader.buildGenerator()` compiles these templates into standard Blockly generator functions at registration time.
+
+### C. Core (Non-Package) Blocks (`client/src/blocks/`)
+
+A small number of blocks that aren't robot-specific are defined in JavaScript:
+*   `blocks/utilities/utilities.js` — General-purpose blocks (wait, elapsed time, graph, print/log, etc.) that are available regardless of which packages are loaded.
+
+### D. Toolbox Management (`client/src/config/`)
+
+The toolbox is assembled in `config/toolbox.js`:
+1.  **Core categories** are imported from `config/categories/` — `logic.js`, `loops.js`, `math.js`, `variables.js`, `functions.js`, `utilities.js`. These provide standard Blockly blocks.
+2.  **Package categories** are appended automatically. `toolbox.js` calls `getAllPackageToolboxXml()` which collects the toolbox XML from every registered package.
+
+```
+Toolbox layout:
+├── Logic        (core)
+├── Loops        (core)
+├── Math         (core)
+├── Variables    (core)
+├── Functions    (core)
+├── Utilities    (core)
+├── ── separator ──
+├── ESP32        (package: esp32.json)
+├── Vehicle      (package: vehicle.json)
+└── UR5 Arm      (package: ur5.json)
+```
+
+To add blocks to an existing category, edit the corresponding file in `config/categories/` or the package JSON. No need to touch `toolbox.js` unless adding a new core category.
+
+## 3. Adding a New Robot Package
+
+1.  **Create** `client/src/packages/builtin/<robot>.json` following the schema above.
+2.  **Import and register** it in `config/toolbox.js`:
+    ```js
+    import myPackage from '../packages/builtin/<robot>.json';
+    registerPackage(myPackage);
+    ```
+3.  That's it — the package's blocks, generators, toolbox category, and reset actions are all active.
+
+### Example: Minimal Package
+
+```json
+{
+  "id": "my_robot",
+  "name": "My Robot",
+  "version": "1.0.0",
+  "description": "Controls for My Robot",
+  "blocks": [
+    {
+      "type": "my_robot_go",
+      "definition": {
+        "message0": "Go Forward at speed %1",
+        "args0": [{ "type": "field_number", "name": "SPEED", "value": 1 }],
+        "previousStatement": null,
+        "nextStatement": null,
+        "colour": 160
+      },
+      "generator": {
+        "type": "statement",
+        "template": "{\n  var t = new ROSLIB.Topic({ ros: ros, name: '/my_robot/cmd', messageType: 'std_msgs/msg/Float64' });\n  t.publish(new ROSLIB.Message({ data: {{$SPEED}} }));\n}\n"
+      }
+    }
+  ],
+  "reset": [
+    { "topic": "/my_robot/cmd", "type": "std_msgs/msg/Float64", "data": { "data": 0 } }
+  ],
+  "category": {
+    "name": "My Robot",
+    "colour": 160,
+    "blocks": [{ "type": "my_robot_go" }]
+  }
+}
+```
 
 ## 4. Coding Standards
-*   **Naming**: Block IDs should be prefixed (e.g., `ur5_move_joint`, `common_publish`).
-*   **Colors**:
-    *   Motion/Action: Blue (230)
-    *   Sensing/Input: Green
-    *   Logic/Control: Yellow
-*   **Inputs**: Use typed inputs (Number, String) to prevent invalid data types being sent to ROS.
+*   **Naming**: Block type IDs should be prefixed by package (e.g., `ur5_move_single_joint`, `esp32_set_pin_on`).
+*   **No IIFEs in templates**: The execution engine wraps all code in a global `async` wrapper. Use bare `{ ... }` blocks for scoping instead (see `async_execution.md`).
+*   **Use `await wait(...)` for delays**: The `wait` function is available globally in the execution scope.
+*   **Globals available**: `ros`, `ROSLIB`, `log`, `wait` are injected by the execution engine.
+*   **AI hints**: Include `ai_description` on blocks and `subcategory_hints` in the `ai` section so the AI chat can use your blocks effectively.

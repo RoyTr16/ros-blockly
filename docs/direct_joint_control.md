@@ -41,7 +41,7 @@ The following diagram illustrates the simplified pipeline for controlling a sing
 ## Component Details
 
 ### 1. Frontend: The "Move Single Joint" Block
-**File**: `client/src/blocks/ur5/single_joint_control.js`
+**File**: `client/src/packages/builtin/ur5.json` (block type: `ur5_move_single_joint`)
 *   **Role**: The User Interface.
 *   **Action**: Publishes a single `std_msgs/Float64` message to a specific topic.
 *   **Topic**: `/ur5/shoulder_pan/cmd`, `/ur5/shoulder_lift/cmd`, etc.
