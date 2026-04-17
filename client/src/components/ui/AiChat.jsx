@@ -35,6 +35,63 @@ const BACKEND_STORAGE = 'ai_backend';
 // mis-flags Hebrew paragraphs that happen to start with an English word
 // (e.g. "Setup: ..." followed by Hebrew).
 const isRTL = (text) => typeof text === 'string' && /[\u0590-\u05FF]/.test(text);
+
+// Typewriter-style markdown renderer. Reveals `text` progressively to give
+// the "typing" effect after the response arrives. Clicking the bubble
+// completes the animation immediately. Partial code fences are kept closed
+// during streaming so the markdown doesn't corrupt mid-typing.
+const TypewriterMarkdown = ({ text, onProgress, speed = 1, charsPerTick = 3 }) => {
+  const [shown, setShown] = useState('');
+  const idxRef = useRef(0);
+  const doneRef = useRef(false);
+
+  useEffect(() => {
+    idxRef.current = 0;
+    doneRef.current = false;
+    setShown('');
+    if (!text) { doneRef.current = true; return; }
+    let raf;
+    let last = performance.now();
+    const step = (now) => {
+      const elapsed = now - last;
+      // Advance ~charsPerTick characters per ~16ms frame (≈ 180 chars/sec).
+      const advance = Math.max(1, Math.floor((elapsed / 16) * charsPerTick));
+      idxRef.current = Math.min(text.length, idxRef.current + advance);
+      setShown(text.slice(0, idxRef.current));
+      onProgress?.();
+      last = now;
+      if (idxRef.current < text.length) {
+        raf = requestAnimationFrame(step);
+      } else {
+        doneRef.current = true;
+      }
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text]);
+
+  // Close an unterminated ``` fence while streaming so ReactMarkdown
+  // doesn't treat the rest of the message as code.
+  const safeShown = (() => {
+    const fenceCount = (shown.match(/```/g) || []).length;
+    return fenceCount % 2 === 1 ? shown + '\n```' : shown;
+  })();
+
+  const handleClick = () => {
+    idxRef.current = text.length;
+    setShown(text);
+    doneRef.current = true;
+  };
+
+  const done = shown.length >= text.length;
+  return (
+    <span onClick={handleClick} className="ai-chat-typewriter">
+      <ReactMarkdown>{safeShown}</ReactMarkdown>
+      {!done && <span className="ai-chat-cursor" aria-hidden="true" />}
+    </span>
+  );
+};
 const OLLAMA_URL_STORAGE = 'ollama_url';
 const OLLAMA_MODEL_STORAGE = 'ollama_model';
 const GEMINI_MODEL_STORAGE = 'gemini_model';
@@ -393,7 +450,7 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
         displayText = displayText.replace(/\n\{[\s\S]*\}\s*$/g, '').trim();
       }
       if (displayText) {
-        setMessages(prev => [...prev, { role: 'assistant', text: displayText }]);
+        setMessages(prev => [...prev, { role: 'assistant', text: displayText, animate: true }]);
       }
 
       // Process tool calls
@@ -402,7 +459,7 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
 
       // If there's a tool call but no explanation text, add a default
       if ((createCall || modifyCall) && !responseText.trim()) {
-        setMessages(prev => [...prev, { role: 'assistant', text: createCall ? 'Here\'s the program I created for you:' : 'I\'ve applied the requested changes:' }]);
+        setMessages(prev => [...prev, { role: 'assistant', text: createCall ? 'Here\'s the program I created for you:' : 'I\'ve applied the requested changes:', animate: true }]);
       }
 
       if (createCall) {
@@ -453,7 +510,7 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
           }
         }
       } else if (!displayText && !responseText) {
-        setMessages(prev => [...prev, { role: 'assistant', text: 'I received your message but had no response. Please try again.' }]);
+        setMessages(prev => [...prev, { role: 'assistant', text: 'I received your message but had no response. Please try again.', animate: true }]);
       }
     } catch (err) {
       console.error('AI Chat error:', err);
@@ -582,10 +639,16 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
         )}
         {messages.map((msg, i) => {
           const messageDir = isRTL(msg.text) ? 'rtl' : 'ltr';
+          const renderMarkdown = msg.role === 'assistant' || msg.role === 'error' || msg.role === 'success';
           return (
           <div key={i} className={`ai-chat-msg ${msg.role}`} dir={messageDir}>
-            {msg.role === 'assistant' || msg.role === 'error' || msg.role === 'success'
-              ? <ReactMarkdown>{msg.text}</ReactMarkdown>
+            {renderMarkdown
+              ? (msg.animate
+                  ? <TypewriterMarkdown
+                      text={msg.text}
+                      onProgress={() => messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })}
+                    />
+                  : <ReactMarkdown>{msg.text}</ReactMarkdown>)
               : msg.text}
             {msg.role === 'pending' && pendingJson && (
               <div className="ai-chat-btn-row">
