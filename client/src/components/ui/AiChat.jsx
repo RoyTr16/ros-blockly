@@ -7,6 +7,25 @@ import { compileDSL } from '../../ai/dslCompiler';
 import { decompileDSL } from '../../ai/dslDecompiler';
 import './AiChat.css';
 
+// Tolerant JSON parser: accepts strict JSON, or JS-literal style (unquoted keys,
+// single-quoted strings, trailing commas) which smaller models sometimes emit
+// despite the prompt asking for strict JSON.
+const parseLooseJson = (s) => {
+  if (typeof s !== 'string') return s;
+  try { return JSON.parse(s); } catch { /* fall through */ }
+
+  let t = s.trim();
+  // Strip ```json fences if present
+  t = t.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+  // Quote unquoted object keys:   {type: ...}   ->  {"type": ...}
+  t = t.replace(/([{,]\s*)([A-Za-z_$][\w$]*)(\s*:)/g, '$1"$2"$3');
+  // Single-quoted strings -> double-quoted (only when not containing unescaped double quotes)
+  t = t.replace(/'((?:[^'\\]|\\.)*)'/g, (_, inner) => `"${inner.replace(/"/g, '\\"')}"`);
+  // Trailing commas:  ,}  or  ,]
+  t = t.replace(/,(\s*[}\]])/g, '$1');
+  return JSON.parse(t);
+};
+
 const API_KEY_STORAGE = 'gemini_api_key';
 const BACKEND_STORAGE = 'ai_backend';
 const OLLAMA_URL_STORAGE = 'ollama_url';
@@ -380,13 +399,14 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
       }
 
       if (createCall) {
-        // blocks comes as a JSON string from the tool call — parse it
+        // blocks comes as a JSON string from the tool call — parse it (tolerant)
         let blocksData;
         try {
           blocksData = typeof createCall.args.blocks === 'string'
-            ? JSON.parse(createCall.args.blocks)
+            ? parseLooseJson(createCall.args.blocks)
             : createCall.args.blocks;
         } catch (e) {
+          console.error('[AiChat] create_program raw args:', createCall.args.blocks);
           setMessages(prev => [...prev, { role: 'error', text: `Failed to parse program data: ${e.message}` }]);
           return;
         }
@@ -404,9 +424,10 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
         let operations;
         try {
           operations = typeof modifyCall.args.operations === 'string'
-            ? JSON.parse(modifyCall.args.operations)
+            ? parseLooseJson(modifyCall.args.operations)
             : modifyCall.args.operations;
         } catch (e) {
+          console.error('[AiChat] modify_program raw args:', modifyCall.args.operations);
           setMessages(prev => [...prev, { role: 'error', text: `Failed to parse modifications: ${e.message}` }]);
           return;
         }

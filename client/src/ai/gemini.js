@@ -1,12 +1,18 @@
-// Gemini API wrapper with function calling for DSL-based block generation
+// Gemini + Gemma API wrapper.
+// Both support systemInstruction + functionDeclarations + thinkingConfig on
+// the v1beta endpoint, so we use a single code path. Tool mode is AUTO — do
+// not switch to ANY with a large tool catalog (known 400 on Gemma).
 import { buildSystemPrompt, getBlockDetails } from './promptBuilder';
 import { buildToolDeclarations } from './toolDefinitions';
 
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 const GEMINI_MODELS = [
-  { id: 'gemini-3-flash-preview', label: 'Flash' },
-  { id: 'gemini-3.1-flash-lite-preview', label: 'Lite' },
+  { id: 'gemini-3-flash-preview', label: 'Gemini Flash' },
+  { id: 'gemini-3.1-flash-lite-preview', label: 'Gemini Lite' },
+  { id: 'gemma-4-31b-it', label: 'Gemma 4 31B' },
+  { id: 'gemma-4-26b-a4b-it', label: 'Gemma 4 26B (MoE)' },
+  // Edge variants (E2B / E4B) are on-device only — not served by the Gemini API.
 ];
 const DEFAULT_MODEL = GEMINI_MODELS[0].id;
 
@@ -39,6 +45,25 @@ export function setModel(m) {
 
 export function getModels() {
   return GEMINI_MODELS;
+}
+
+// Query the live Gemini API for every model this key can call with
+// generateContent. Useful for verifying Gemma model names after a release.
+// Call from the devtools console:  await window.__listGeminiModels?.()
+export async function listAvailableModels() {
+  if (!apiKey) throw new Error('Gemini not initialized.');
+  const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}&pageSize=1000`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`ListModels failed: ${res.status}`);
+  const data = await res.json();
+  return (data.models || [])
+    .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
+    .map(m => m.name.replace(/^models\//, ''))
+    .sort();
+}
+
+if (typeof window !== 'undefined') {
+  window.__listGeminiModels = listAvailableModels;
 }
 
 export function setThinkingLevel(level) {

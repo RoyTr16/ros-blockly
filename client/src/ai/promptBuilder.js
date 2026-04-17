@@ -333,48 +333,54 @@ Step 3 — create_program(blocks: [{type:"wait_seconds",seconds:2},{type:"utilit
 - **IMPORTANT**: Always include a Markdown explanation alongside every tool call.`;
 
   const exampleSection = `## create_program Tool
-The "blocks" parameter is a **JSON string** (not an object). Encode the blocks array as a JSON string.
+The "blocks" parameter is a **JSON string** (not an object). Encode the blocks array as strict JSON — **all keys and string values must use double quotes**.
 The blocks array contains chains. Each chain is an array of sequential blocks.
 
 ### Example — Blink a pin:
-create_program({ blocks: JSON.stringify([
-  [
-    { type: "forever", body: [
-      { type: "esp32_set_pin_on", pin: 14 },
-      { type: "wait_seconds", seconds: 0.5 },
-      { type: "esp32_set_pin_off", pin: 14 },
-      { type: "wait_seconds", seconds: 0.5 }
-    ]}
-  ]
-])})
+create_program({ blocks: "[[{\\"type\\":\\"forever\\",\\"body\\":[{\\"type\\":\\"esp32_set_pin_on\\",\\"pin\\":14},{\\"type\\":\\"wait_seconds\\",\\"seconds\\":0.5},{\\"type\\":\\"esp32_set_pin_off\\",\\"pin\\":14},{\\"type\\":\\"wait_seconds\\",\\"seconds\\":0.5}]}]]" })
 
-### Example — Distance-based LED:
-create_program({ blocks: JSON.stringify([
+The decoded value above is:
+[
   [
-    { type: "rgb_led_setup", var: "led1", r_pin: 27, g_pin: 14, b_pin: 12 },
-    { type: "esp32_setup_ultrasonic", var: "dist", trig_pin: 17, echo_pin: 16 },
-    { type: "forever", body: [
-      { type: "rgb_led_set_color", var: "led1", red: "intensity", green: 0, blue: { type: "math_arithmetic", op: "MINUS", a: 255, b: "intensity" } },
-      { type: "wait_seconds", seconds: 0.02 }
+    { "type": "forever", "body": [
+      { "type": "esp32_set_pin_on",  "pin": 14 },
+      { "type": "wait_seconds", "seconds": 0.5 },
+      { "type": "esp32_set_pin_off", "pin": 14 },
+      { "type": "wait_seconds", "seconds": 0.5 }
     ]}
   ]
-])})
+]
+
+### Example — Distance-based LED (decoded form shown):
+[
+  [
+    { "type": "rgb_led_setup", "var": "led1", "r_pin": 27, "g_pin": 14, "b_pin": 12 },
+    { "type": "esp32_setup_ultrasonic", "var": "dist", "trig_pin": 17, "echo_pin": 16 },
+    { "type": "forever", "body": [
+      { "type": "rgb_led_set_color", "var": "led1", "red": "intensity", "green": 0,
+        "blue": { "type": "math_arithmetic", "op": "MINUS", "a": 255, "b": "intensity" } },
+      { "type": "wait_seconds", "seconds": 0.02 }
+    ]}
+  ]
+]
+
+**IMPORTANT**: Never output JavaScript object-literal syntax (unquoted keys, single quotes, trailing commas). The parameter value is a string containing strict JSON.
 
 ## modify_program Tool
 The "operations" parameter is a **JSON string** encoding an array of operations.
 Use this for small changes.
-Operations:
-- **set_field**: { action: "set_field", block_type: "esp32_set_pin_on", field: "PIN", value: "2" }
-- **set_input**: { action: "set_input", block_type: "wait_seconds", input: "SECONDS", value: "0.05" }
-- **remove_block**: { action: "remove_block", block_type: "wait_seconds", occurrence: 0 }
-- **add_after**: { action: "add_after", block_type: "rgb_led_preset_color", blocks: [{...}], occurrence: 0 }
-- **insert**: { action: "insert", block: { type: "utilities_graph_viewer", var: "myGraph" } } — adds a standalone block to the workspace
-- **insert** (into chain): { action: "insert", chain: 0, position: 2, block: {...} } — inserts into an existing chain at position
+Operations (shown decoded; you pass them as a JSON string with double-quoted keys):
+- { "action": "set_field", "block_type": "esp32_set_pin_on", "field": "PIN", "value": "2" }
+- { "action": "set_input", "block_type": "wait_seconds", "input": "SECONDS", "value": "0.05" }
+- { "action": "remove_block", "block_type": "wait_seconds", "occurrence": 0 }
+- { "action": "add_after", "block_type": "rgb_led_preset_color", "blocks": [ ... ], "occurrence": 0 }
+- { "action": "insert", "block": { "type": "utilities_graph_viewer", "var": "myGraph" } }
+- { "action": "insert", "chain": 0, "position": 2, "block": { ... } }
 
 ## get_block_details Tool
 Call this BEFORE creating a program to get the exact DSL syntax for blocks you plan to use.
-Pass an array of block type names. The system returns their DSL format, fields, and inputs.
-Example: get_block_details({ block_types: '["esp32_set_pin_on", "esp32_setup_ultrasonic"]' })`;
+Pass a JSON array string of block type names. The system returns their DSL format, fields, and inputs.
+Example: get_block_details({ block_types: "[\\"esp32_set_pin_on\\", \\"esp32_setup_ultrasonic\\"]" })`;
 
   return `You are a friendly Blockly programming assistant for a robotics control GUI.
 You help users create and modify visual block programs.
