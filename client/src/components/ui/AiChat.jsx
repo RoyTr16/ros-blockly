@@ -28,6 +28,13 @@ const parseLooseJson = (s) => {
 
 const API_KEY_STORAGE = 'gemini_api_key';
 const BACKEND_STORAGE = 'ai_backend';
+
+// Explicit bidi: pick the message direction from its content. If any Hebrew
+// character appears, treat the whole message as RTL. This is more reliable
+// than `dir="auto"`, which only inspects the first strong character and
+// mis-flags Hebrew paragraphs that happen to start with an English word
+// (e.g. "Setup: ..." followed by Hebrew).
+const isRTL = (text) => typeof text === 'string' && /[\u0590-\u05FF]/.test(text);
 const OLLAMA_URL_STORAGE = 'ollama_url';
 const OLLAMA_MODEL_STORAGE = 'ollama_model';
 const GEMINI_MODEL_STORAGE = 'gemini_model';
@@ -573,8 +580,10 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
             <span className="ai-chat-empty-hint">e.g. "Blink the LED on pin 13 every second"</span>
           </div>
         )}
-        {messages.map((msg, i) => (
-          <div key={i} className={`ai-chat-msg ${msg.role}`}>
+        {messages.map((msg, i) => {
+          const messageDir = isRTL(msg.text) ? 'rtl' : 'ltr';
+          return (
+          <div key={i} className={`ai-chat-msg ${msg.role}`} dir={messageDir}>
             {msg.role === 'assistant' || msg.role === 'error' || msg.role === 'success'
               ? <ReactMarkdown>{msg.text}</ReactMarkdown>
               : msg.text}
@@ -589,7 +598,8 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
         {loading && (
           <div className="ai-chat-loading">
             Thinking
@@ -616,6 +626,7 @@ const AiChat = ({ blocklyRef, generatedCode, onPreviewChange }) => {
           onKeyDown={handleKeyDown}
           rows={1}
           disabled={loading}
+          dir="auto"
         />
         <button
           className="ai-chat-send"

@@ -172,6 +172,10 @@
   max-width: 92%;
   word-wrap: break-word;
   position: relative;
+  /* Direction is set explicitly via the dir attribute from JSX based on
+     whether the message contains Hebrew characters. This is more robust
+     than unicode-bidi:plaintext / dir="auto", which mis-flags Hebrew
+     paragraphs that begin with an English word (e.g. "Setup: ..."). */
 }
 
 .ai-chat-msg.user {
@@ -216,7 +220,9 @@
   border-bottom-left-radius: 4px;
 }
 
-/* Markdown content inside messages */
+/* Markdown content inside messages. Direction is inherited from the
+   message wrapper's dir attribute, so no unicode-bidi or text-align is
+   needed here. */
 .ai-chat-msg p {
   margin: 0 0 0.4em;
 }
@@ -240,7 +246,8 @@
 
 .ai-chat-msg ul, .ai-chat-msg ol {
   margin: 0.3em 0;
-  padding-left: 1.4em;
+  padding-inline-start: 1.4em;
+  padding-left: 0;
 }
 
 .ai-chat-msg li {
@@ -254,6 +261,13 @@
   font-family: var(--font-mono, monospace);
   font-size: 0.85em;
   color: var(--accent-indigo);
+  /* Inline code stays LTR regardless of surrounding paragraph direction.
+     inline-block + baseline alignment prevents space-collapsing artifacts
+     when English identifiers are embedded inside Hebrew prose. */
+  unicode-bidi: isolate;
+  direction: ltr;
+  display: inline-block;
+  vertical-align: baseline;
 }
 
 .ai-chat-msg pre {
@@ -262,6 +276,10 @@
   padding: 8px 10px;
   margin: 0.4em 0;
   overflow-x: auto;
+  /* Code blocks always align left, even inside an RTL message. */
+  direction: ltr;
+  text-align: left;
+  unicode-bidi: isolate;
 }
 
 .ai-chat-msg pre code {
@@ -401,6 +419,11 @@
   min-height: 40px;
   max-height: 100px;
   transition: border-color 0.15s;
+  /* Bidi: with dir="auto" on the element, each line picks its direction
+     from the first strong character. plaintext ensures the same per-line
+     behavior for soft-wrapped content. */
+  unicode-bidi: plaintext;
+  text-align: start;
 }
 
 .ai-chat-input:focus {
