@@ -6,9 +6,9 @@ This document describes the architecture of the ROS Blockly Robot Control projec
 
 The project uses Docker Compose to orchestrate multiple services. There are two compose files:
 *   `docker-compose.yml` — for **Linux** (rosbridge uses host networking for direct LAN multicast access).
-*   `docker-compose.windows.yml` — for **Windows** (adds Zenoh bridge and micro-ROS agent to work around WSL2 multicast blocking).
+*   `docker-compose.windows.yml` — for **Windows** (adds the Zenoh bridge to work around WSL2 multicast blocking).
 
-Services are gated behind **profiles** — only the core services (`rosbridge`, `client`) start by default. Add `--profile sim` for simulation and `--profile ollama` for a local AI model.
+Services are gated behind **profiles** — only the core services (`rosbridge`, `client`) start by default. Add `--profile sim` for simulation, `--profile ollama` for a local AI model, and `--profile microros` for the ESP32 micro-ROS agent. Profiles can be combined.
 
 See `docs/docker_architecture.md` for full service details and environment variables.
 
@@ -46,9 +46,9 @@ See `docs/docker_architecture.md` for full service details and environment varia
 - **Role**: Tunnels DDS traffic over TCP to bypass WSL2 multicast blocking.
 - See `docs/zenoh-network-architecture.md`.
 
-### 7. micro-ROS Agent (Windows only)
-- **Role**: UDP agent for ESP32 microcontrollers.
-- **Port**: `8888:8888/udp`.
+### 7. micro-ROS Agent (profile: `microros`)
+- **Role**: UDP agent for ESP32 microcontrollers. Defined in both compose files.
+- **Port**: `8888:8888/udp` (on Windows; Linux uses host networking).
 
 ## Network Diagram
 

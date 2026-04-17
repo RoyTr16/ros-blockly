@@ -4,10 +4,11 @@
 # physical LAN robots directly — no Zenoh tunnel needed.
 #
 # Usage:
-#   docker compose up                (LAN robots)
-#   docker compose --profile sim up  (with simulator)
-#   docker compose --profile ollama up (with local Ollama)
-#   Profiles can be combined: --profile sim --profile ollama
+#   docker compose up                     (LAN robots)
+#   docker compose --profile sim up       (with simulator)
+#   docker compose --profile ollama up    (with local Ollama)
+#   docker compose --profile microros up  (with micro-ROS agent for ESP32)
+#   Profiles can be combined: --profile sim --profile ollama --profile microros
 #
 # For Windows (Docker Desktop / WSL2), use docker-compose.windows.yml instead.
 
@@ -49,6 +50,20 @@ services:
     volumes:
       - ./client:/app
       - /app/node_modules
+
+  microros:
+    profiles: ["microros"]
+    build:
+      context: ./docker/microros
+    # Host networking: the ESP32 connects to the agent by the host's LAN IP
+    # on UDP/8888. Multicast DDS discovery also stays on the LAN this way,
+    # matching the rosbridge setup above.
+    network_mode: host
+    ipc: host
+    environment:
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID}
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+    command: udp4 --port 8888 -v4
 
   simulator:
     profiles: ["sim"]

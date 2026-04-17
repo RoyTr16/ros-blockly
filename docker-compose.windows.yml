@@ -6,10 +6,11 @@
 # relay (start_windows_relay.bat) which re-broadcasts onto the physical network.
 #
 # Usage:
-#   docker compose -f docker-compose.windows.yml up              (LAN robots)
-#   docker compose -f docker-compose.windows.yml --profile sim up (with simulator)
-#   docker compose -f docker-compose.windows.yml --profile ollama up (with local Ollama)
-#   Profiles can be combined: --profile sim --profile ollama
+#   docker compose -f docker-compose.windows.yml up                      (LAN robots)
+#   docker compose -f docker-compose.windows.yml --profile sim up        (with simulator)
+#   docker compose -f docker-compose.windows.yml --profile ollama up     (with local Ollama)
+#   docker compose -f docker-compose.windows.yml --profile microros up   (with micro-ROS agent for ESP32)
+#   Profiles can be combined: --profile sim --profile ollama --profile microros
 
 services:
   zenoh-bridge:
@@ -62,6 +63,7 @@ services:
       - ros_net
 
   microros:
+    profiles: ["microros"]
     build:
       context: ./docker/microros
     ports:

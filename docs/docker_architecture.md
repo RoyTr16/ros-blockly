@@ -9,10 +9,11 @@ Both files share the same core services. The Windows file adds extra services to
 Not all services start by default. Docker Compose **profiles** control which services are included:
 
 ```bash
-docker compose up                              # Core only (rosbridge + client)
-docker compose --profile sim up                # + simulator & robot
-docker compose --profile ollama up             # + local Ollama LLM
-docker compose --profile sim --profile ollama up  # all
+docker compose up                                    # Core only (rosbridge + client)
+docker compose --profile sim up                      # + simulator & robot
+docker compose --profile ollama up                   # + local Ollama LLM
+docker compose --profile microros up                 # + micro-ROS agent for ESP32
+docker compose --profile sim --profile ollama up     # combine profiles
 ```
 
 On Windows, prepend `-f docker-compose.windows.yml`.
@@ -83,10 +84,12 @@ On Windows, prepend `-f docker-compose.windows.yml`.
 *   **Network**: `ros_net`.
 *   See `zenoh-network-architecture.md` for the full explanation.
 
-### 7. `microros` (Windows only)
-*   **Role**: Runs a micro-ROS agent for ESP32 microcontrollers communicating over UDP.
+### 7. `microros` (profile: `microros`)
+*   **Role**: Runs a micro-ROS agent for ESP32 microcontrollers communicating over UDP. Available on both Linux and Windows compose files; enable it with `--profile microros`.
 *   **Image**: Built from `./docker/microros` (`microros/micro-ros-agent:jazzy` + CycloneDDS).
-*   **Ports**: Exposes `8888:8888/udp`.
+*   **Networking**:
+    *   **Linux**: `network_mode: host` — the ESP32 connects directly to the host's LAN IP on `udp/8888`, and DDS discovery reaches the rest of the LAN natively.
+    *   **Windows**: On the `ros_net` bridge network with `8888:8888/udp` published to the host; DDS traffic reaches the rest of the stack via the Zenoh tunnel.
 *   **Command**: `udp4 --port 8888 -v4`.
 
 ## Networking & Communication
