@@ -8,6 +8,7 @@ import { buildToolDeclarations } from './toolDefinitions';
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 const GEMINI_MODELS = [
+  { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
   { id: 'gemini-3-flash-preview', label: 'Gemini Flash' },
   { id: 'gemini-3.1-flash-lite-preview', label: 'Gemini Lite' },
   { id: 'gemma-4-31b-it', label: 'Gemma 4 31B' },
